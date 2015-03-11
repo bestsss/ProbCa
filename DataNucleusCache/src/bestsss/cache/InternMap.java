@@ -1,5 +1,6 @@
 package bestsss.cache;
 
+import java.math.BigInteger;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -16,13 +17,13 @@ public class InternMap<E> {
 	  return String.format("%s:%d", e, get());
 	}
   }
-
+  private static final int prime = BigInteger.probablePrime(32, ThreadLocalRandom.current()).intValue();
+  
   //with a load factor of 0.5 it holds 64 elements which should be more than enough
   final AtomicReferenceArray<Node<E>> table=new AtomicReferenceArray<>(128);
-  
     
   
-  final int hashSeed = System.identityHashCode(new Object());//cheap-o random
+  final int hashSeed = prime  * ThreadLocalRandom.current().nextInt();//cheap-o random
   final int length = table.length();
   
   final AtomicInteger size=new AtomicInteger();
@@ -50,19 +51,19 @@ public class InternMap<E> {
     int selected = -1;
     int min = Integer.MAX_VALUE;
     Node<E> ref = null;
-    int count = 0;
+    int count = 0;//count non-null values
     for (int i=0, len=length; i<16; i++){//on average half should be nulls
       int idx = index(r.nextInt(len),len);
       Node<E> node = table.get(idx);
       if (node==null)
         continue;
 
+      count++;
       int hits = node.get(); 
       if (hits < min){
         ref = node;
         min = hits;
         selected = idx;
-        count++;
       }        
     }
     if (count>7 && ref!=null){
@@ -102,8 +103,9 @@ public class InternMap<E> {
             i=index(hash, length);//start over
             continue;
           }
-          return null;
         }
+        return null;
+
       }
       else if (e.equals(value.e)){
         value.incrementAndGet();
@@ -121,9 +123,9 @@ public class InternMap<E> {
     int h = hashSeed;
 
     h ^= k.hashCode();
-
-    h ^= (h >>> 20) ^ (h >>> 12);
-    return h ^ (h >>> 7) ^ (h >>> 4);
+    return h*=4259;
+//    h ^= (h >>> 20) ^ (h >>> 12);
+//    return h ^ (h >>> 7) ^ (h >>> 4);
   }
 
 
