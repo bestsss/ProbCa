@@ -8,7 +8,7 @@ class FastIntSet {
   }
 
   /**
-   * @param n, any interger but -1
+   * @param n, any integer but -1
    * @return true if added to the set, false if already existed
    */
   public boolean add(int n){

@@ -54,7 +54,6 @@ public class CachedX<T> extends CachedPC<T>{
 
   @Override
   public Object getFieldValue(Integer fieldNumber) {
-//	System.out.println(getObjectClass()+ " : "+fieldNumber);
     int f = fieldNumber;
     if (f<0 || f>=length){
       return null;
@@ -132,7 +131,7 @@ public class CachedX<T> extends CachedPC<T>{
     if (f<length){
       allFields[f] = NOT_PRESENT;
     }
-    //ignore fields about length
+    //ignore fields above length
   }
 
   

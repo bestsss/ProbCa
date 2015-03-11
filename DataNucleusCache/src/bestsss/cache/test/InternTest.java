@@ -19,7 +19,7 @@ public class InternTest {
   static long ops = (long) 1e7;
   static int threads = Runtime.getRuntime().availableProcessors();
   static int maxValue = 512;
-  static final int[] spreads = {9, maxValue/8, 9, maxValue/4, 10, maxValue/2, 22, 24, 64, 33, 128, maxValue, 11};
+  static final int[] spreads = {9, maxValue/8, 9, maxValue/4, 10, maxValue/2, 22, 24, 64, 33, maxValue, 11};
   
   final ExecutorService executor = Executors.newCachedThreadPool();
   final InternMap<Long> map =new InternMap<>();
