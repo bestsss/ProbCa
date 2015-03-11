@@ -5,10 +5,9 @@ import java.util.concurrent.TimeUnit;
 import jsr166e.LongAdder;
 
 /**
- * @copyright Playtech 2014
  * @author Stanimir Simeonoff
  */
-public final class Stats {
+public final class Stats implements CacheStatistics {
   
   private final LongAdder hits=new LongAdder();
   private final LongAdder misses=new LongAdder();
@@ -48,21 +47,29 @@ public final class Stats {
 	expirationTime.add(elapsedTime);
 	expirations.add(elapsedTime);
   }
-  
+  @Override
   public double getEvictionTimeMillis(){
 	return evictionTime.doubleValue() /TimeUnit.NANOSECONDS.toMillis(1);
   }
+
+  @Override
   public long getEvictions(){
 	return evictions.longValue();
   }
   
+
+  @Override
   public double getExpirationTimeMillis(){
 	return expirationTime.doubleValue() /TimeUnit.NANOSECONDS.toMillis(1);
   }
+
+  @Override
   public long getExpirations(){
 	return expirations.longValue();
   }
     
+
+  @Override
   public double getHitRatio(){
 	long hits = getHits();
 	long misses = getMisses();
@@ -70,20 +77,27 @@ public final class Stats {
 	return (double)hits/(hits+misses);
   }
   
+
+  @Override
   public long getHits(){
 	return this.hits.longValue();	
   }
+
+  @Override
   public long getMisses(){
 	return this.misses.longValue();		
   }
+
+  @Override
   public long getPuts(){
 	return this.misses.longValue();		
   }
+
+  @Override
   public long getRemovals(){
 	return this.removals.longValue();		
   }
   public long time() {
 	return System.nanoTime();
-  }
-  
+  }  
 }

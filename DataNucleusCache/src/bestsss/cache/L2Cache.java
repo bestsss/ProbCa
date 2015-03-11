@@ -264,6 +264,10 @@ public class L2Cache implements Level2Cache{
     return result;    
   }
 
+  public CacheStatistics getStats(){
+	return stats;
+  }
+  
   @Override
   public CachedPC put(Object oid, CachedPC pc) {
     return putImpl(oid, pc, true);//the return value is never used, so we can ignore it 
@@ -425,4 +429,5 @@ public class L2Cache implements Level2Cache{
     elapsed >>>= 10;// shift is way faster than div 1000 to get the seconds and it's 2% off, which is ok
     return (int) elapsed;    
   }
+  
 }
