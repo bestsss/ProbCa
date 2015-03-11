@@ -78,7 +78,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   }
 
   public long tombstones(){//sum up all sizes and check for overflow
-    int tombstones = 0;
+    long tombstones = 0;
 
     final Segment[] segments = this.segments;
     for (Segment segment : segments){
@@ -149,7 +149,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
               if (result!=null){//removal successful, reduce size, increase tombstones
                 segment.addSize(-1);
                 
-                if (segment.addTobmstone(1) > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attemp clear up
+                if (segment.addTobmstone(1) > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
                   expungeTombstones(segment);
                 }
                 
