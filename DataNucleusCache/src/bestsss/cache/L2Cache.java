@@ -71,7 +71,7 @@ public class L2Cache implements Level2Cache{
 	}
   
   }
-  private final AtomicReference<IdentityHashMap<Class<?>, ClassMeta>> maxLengths=new AtomicReference<IdentityHashMap<Class<?>,ClassMeta>>(new IdentityHashMap<Class<?>,ClassMeta>());
+  private final AtomicReference<IdentityHashMap<Class<?>, ClassMeta>> metaMap=new AtomicReference<IdentityHashMap<Class<?>,ClassMeta>>(new IdentityHashMap<Class<?>,ClassMeta>());
   private final Allocator allocator;
   private NucleusContext nucleusContext;
   
@@ -141,20 +141,21 @@ public class L2Cache implements Level2Cache{
   
   
   private ClassMeta addMeta(Class<?> clazz, ClassMeta classMeta){
-    for(;;){//copy on write
-      IdentityHashMap<Class<?>, ClassMeta> map = maxLengths.get();    
-      ClassMeta existing  = map.get(clazz);
-      final int existingLength = existing!=null? existing.length : -1;      
-      
-      if (existingLength < classMeta.length){
-        IdentityHashMap<Class<?>, ClassMeta> update = new IdentityHashMap<>(map);
-        map.put(clazz, classMeta);
-        maxLengths.compareAndSet(map, update);
-        return classMeta;
-      }
-      
-      return existing;
-    }      
+	for(;;){//copy on write
+	  final IdentityHashMap<Class<?>, ClassMeta> map = metaMap.get();    
+	  final ClassMeta existing  = map.get(clazz);
+	  final int existingLength = existing!=null? existing.length : -1;      
+
+	  if (existingLength >= classMeta.length){
+		return existing;
+	  }
+	
+	  IdentityHashMap<Class<?>, ClassMeta> update = new IdentityHashMap<>(map);
+	  map.put(clazz, classMeta);
+	  if (metaMap.compareAndSet(map, update)){
+		return classMeta;
+	  }
+	}
   }
   
   
@@ -432,7 +433,7 @@ public class L2Cache implements Level2Cache{
   }
   
   private ClassMeta getMeta(Class<?> clazz) {
-	ClassMeta result = maxLengths.get().get(clazz);
+	ClassMeta result = metaMap.get().get(clazz);
 	if (result!=null){
 	  return result;
 	}
