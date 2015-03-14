@@ -1,18 +1,21 @@
 package bestsss.cache;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.datanucleus.NucleusContext;
 import org.datanucleus.cache.CachedPC;
 import org.datanucleus.cache.Level2Cache;
 import org.datanucleus.metadata.AbstractClassMetaData;
+import org.datanucleus.metadata.AbstractMemberMetaData;
 
 //all PCs are stored as Object[] (similar to JCredo), it's a lot better than the current CachedPC which is very memory unfriendly
 public class L2Cache implements Level2Cache{
@@ -27,23 +30,25 @@ public class L2Cache implements Level2Cache{
   Table<Object, Object[]> table = new ClosedHashTable<>();
   private final int maxElements;//65536 default
   private final Stats stats = new Stats();
+  private final ConcurrentHashMap<String, InternMap<Object>> globalInterns = new ConcurrentHashMap<String, InternMap<Object>>();
   
   private static class ClassMeta{
 	final Class<?> clazz;
 	final int length;
 	final boolean cacheable;
 	final int expiration;
-	
-	public ClassMeta(Class<?> clazz, int length, boolean cacheable, int expiration) {
+	final InternEntry[] interns;
+	public ClassMeta(Class<?> clazz, InternEntry[] interns, int length, boolean cacheable, int expiration) {
 	  super();
 	  this.clazz=clazz;
+	  this.interns = interns;
 	  this.length = length;
 	  this.cacheable = cacheable;
 	  this.expiration = expiration;
 	}
 
 	public ClassMeta newLength(int length) {
-	  return new ClassMeta(clazz, length, cacheable, expiration);
+	  return new ClassMeta(clazz, interns, length, cacheable, expiration);
 	}
   }
   private static class EvictionInfo{
@@ -54,7 +59,18 @@ public class L2Cache implements Level2Cache{
 	  this.evictedAt = time;
 	}
   }
+  private static class InternEntry{
+	static final InternEntry[] EMPTY={};
+	final int field;
+	final InternMap<Object> map;
+
+	public InternEntry(int field, InternMap<Object> map) {
+	  super();
+	  this.field = field;
+	  this.map = map;
+	}
   
+  }
   private final AtomicReference<IdentityHashMap<Class<?>, ClassMeta>> maxLengths=new AtomicReference<IdentityHashMap<Class<?>,ClassMeta>>(new IdentityHashMap<Class<?>,ClassMeta>());
   private final Allocator allocator;
   private NucleusContext nucleusContext;
@@ -339,22 +355,28 @@ public class L2Cache implements Level2Cache{
       return ((CachedX<?>) pc).getArray();
     }
     
-    final int originalLength = getMeta(pc.getObjectClass()).length; 
-    final int length = Math.max(originalLength, pc.getLoadedFields().length);
-    
-    Object[] fields = ArrayUtil.newArray(pc, length, allocator, time());
-    
-    CachedX<Object> c =new CachedX<Object>((Class<Object>)pc.getObjectClass(), fields, length, pc.getVersion());
-    for (int f : pc.getLoadedFieldNumbers()){
-      c.set(f, pc.getFieldValue(f));
+    final ClassMeta meta = getMeta(pc.getObjectClass());
+	final boolean[] loaded = pc.getLoadedFields();
+    final int length = Math.max(meta.length, loaded.length);
+    if (length>meta.length){
+      addMeta(meta.clazz, meta.newLength(length));
     }
-    if (c.getLength()>originalLength){
-      ClassMeta meta = getMeta(c.getObjectClass()); 
-      addMeta(c.getObjectClass(), meta.newLength(c.getLength()));
+    
+    final Object[] fields = ArrayUtil.newArray(pc, length, allocator, time());
+    for (int i=0; i<loaded.length; i++){
+      if (!loaded[i])
+      	continue;
+      
+      fields[i] = pc.getFieldValue(i);
+    }
+    
+    //process interns
+    for (InternEntry e : meta.interns){
+      fields[e.field] = e.map.intern(fields[e.field]);
     }
     return fields;
-    
   }
+  
 
 
   
@@ -415,12 +437,38 @@ public class L2Cache implements Level2Cache{
 	  return result;
 	}
     AbstractClassMetaData meta = nucleusContext.getMetaDataManager().getMetaDataForClass(clazz, null);      
-   
+    InternEntry[] interns = InternEntry.EMPTY;
+    if (meta!=null){
+      ArrayList<InternEntry> list = resolveInterns(meta);
+      if (!list.isEmpty())
+    	interns=list.toArray(interns);
+    }
     
     int length = meta!=null?meta.getMemberCount():2;
-    ClassMeta classMeta = new ClassMeta(clazz, length, resolveCacheable(meta), resolveExpiration(meta));
+    ClassMeta classMeta = new ClassMeta(clazz, interns, length, resolveCacheable(meta), resolveExpiration(meta));
     return addMeta(clazz, classMeta);    
 
+  }
+
+  private ArrayList<InternEntry> resolveInterns(AbstractClassMetaData meta) {
+	ArrayList<InternEntry> list = new ArrayList<>();
+	for (AbstractMemberMetaData fieldMeta : meta.getManagedMembers()){
+	  String intern = fieldMeta.getValueForExtension(JdoExtensions.INTERN);
+	  if (intern==null)
+		continue;
+
+	  if ("default".equals(intern))
+		intern = fieldMeta.getName();
+
+	  InternMap<Object> map = globalInterns.get(intern);
+	  if (map==null){
+		InternMap<Object> existing = globalInterns.putIfAbsent(intern, map=new InternMap<>());
+		if (existing!=null)
+		  map=existing;
+	  }
+	  list.add(new InternEntry(fieldMeta.getFieldId(), map));
+	}
+	return list;
   }
   
   int time(){ 
