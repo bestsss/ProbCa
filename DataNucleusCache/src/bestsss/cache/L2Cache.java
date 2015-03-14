@@ -406,7 +406,7 @@ public class L2Cache implements Level2Cache{
     Object[] array = (Object[]) object;
     
     if (array.length < ArrayUtil.RESERVED){
-      throw new IllegalStateException("Wrong array: "+Arrays.toString(array));
+      throwWrongArray(array);//separate method to reduce code size
     }
     
 
@@ -420,9 +420,7 @@ public class L2Cache implements Level2Cache{
     }
 
     Object version = array[--len];
-    
-    
-    
+     
     //touch the original array    
     ArrayUtil.incHitCount(array);
     //need to clone in order to use the allocator, cloning would keep the object in the young gen
@@ -430,6 +428,10 @@ public class L2Cache implements Level2Cache{
     //technically using ref counting and finalize can achieve similar effects but it's too expensive (finalize requires FinalReference and a wide global lock)    
     CachedX<Object> result = new CachedX<Object>(clazz, array.clone(), array.length - ArrayUtil.RESERVED, version);        
     return result;
+  }
+
+  private static void throwWrongArray(Object[] array) {
+	throw new IllegalStateException("Wrong array: "+Arrays.toString(array));
   }
   
   private ClassMeta getMeta(Class<?> clazz) {
