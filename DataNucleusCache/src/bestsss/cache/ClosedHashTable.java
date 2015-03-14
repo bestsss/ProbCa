@@ -526,7 +526,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     final ThreadLocalRandom random = ThreadLocalRandom.current();
 
 
-    final Segment segment = selectSegment(random.nextInt());
+    final Segment segment = highSizedSegment(random);
     final int length = segment.length();
     final int sampleSize = Math.min( entries * 17, length>>>1) ;//k=17 should be 99% chance to hit bottom 15%
 
@@ -568,14 +568,26 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         return  comparator.compare(v1, v2);
       }      
     };
-    Collection<Integer> expirable = x.leastOf(new IntSeq(0, count), count);
+    int resultCount = Math.min(entries,count);
+    Collection<Integer> expirable = x.leastOf(new IntSeq(0, count), resultCount);
     ArrayList<K> keys = new ArrayList<>(expirable.size());
     for (Integer n : expirable){
       keys.add((K)sample[n<<1]);
     }
     return keys;
   }
-
+  private Segment highSizedSegment(ThreadLocalRandom r){
+    Segment[] segments=this.segments;
+    int len = segments.length;
+    
+    Segment seg1 = segments[r.nextInt(len)];
+    Segment seg2 = segments[r.nextInt(len)];
+    Segment seg3 = segments[r.nextInt(len)];
+    int s1 = seg1.size();
+    int s2 = seg2.size();
+    int s3 = seg3.size();
+    return s1>s2? ((s1>s3)?seg1:seg3) : (s2>s3?seg2:seg3);
+  }
   public void clear() {    
 	final Segment[] segments = this.segments;
 	for (int i=0;i<segments.length;i++){
