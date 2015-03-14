@@ -77,7 +77,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     return size;
   }
 
-  public long tombstones(){//sum up all sizes and check for overflow
+  public long tombstones(){//sum up all sizes, return long skip overflows
     long tombstones = 0;
 
     final Segment[] segments = this.segments;
@@ -265,7 +265,9 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   }
 
   private boolean closeDeletion(Segment s, int d, final int len) {
-    //deletion attempts to lock the cells
+	//Knuth Section 6.4
+	
+	//deletion attempts to lock the cells
     //and proceed with freeing up the TOMBSTONE 
     //if any locking fails, skip over
 
@@ -326,39 +328,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       i =j;
     }
     return result;
-
   }
-  /*
-    private void closeDeletion(int d) {
-        // Adapted from Knuth Section 6.4 Algorithm R
-        Object[] tab = table;
-        int len = tab.length;
-
-        // Look for items to swap into newly vacated slot
-        // starting at index immediately following deletion,
-        // and continuing until a null slot is seen, indicating
-        // the end of a run of possibly-colliding keys.
-        Object item;
-        for (int i = nextKeyIndex(d, len); (item = tab[i]) != null;
-             i = nextKeyIndex(i, len) ) {
-            // The following test triggers if the item at slot i (which
-            // hashes to be at slot r) should take the spot vacated by d.
-            // If so, we swap it in, and then continue with d now at the
-            // newly vacated i.  This process will terminate when we hit
-            // the null slot at the end of this run.
-            // The test is messy because we are using a circular table.
-            int r = hash(item, len);
-            if ((i < r && (r <= d || d <= i)) || (r <= d && d <= i)) {
-                tab[d] = item;
-                tab[d + 1] = tab[i + 1];
-                tab[i] = null;
-                tab[i + 1] = null;
-                d = i;
-            }
-        }
-    }
-
-   */
 
   private static void processLoopCounter(int loop) {
     if (CPUs==1 || (loop & 0x3ff)==0x3ff){//1023, park a bit
@@ -552,7 +522,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
    */
   
   public List<K> getExpirable(int entries, final Comparator<V> comparator){
-    //probabalisitc expireation
+    //Probabilistic expiration
     final ThreadLocalRandom random = ThreadLocalRandom.current();
 
 
@@ -618,6 +588,4 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
 	  }
 	}
   }
-
-
 }

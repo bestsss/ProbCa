@@ -123,9 +123,8 @@ public class InternMap<E> {
     int h = hashSeed;
 
     h ^= k.hashCode();
-    return h*=4259;
-//    h ^= (h >>> 20) ^ (h >>> 12);
-//    return h ^ (h >>> 7) ^ (h >>> 4);
+    h ^= (h >>> 20) ^ (h >>> 12);
+    return h ^ (h >>> 7) ^ (h >>> 4);
   }
 
 
