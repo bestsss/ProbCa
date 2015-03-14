@@ -112,7 +112,7 @@ public class L2Cache implements Level2Cache{
       int hits2 = ArrayUtil.getHits(o2);
       int v2 = calcEntryValue(time2, hits2);
       
-      return v2-v1;//reverse, i.e.higher is better
+      return v1-v2;//lowest values are the ones to be evicted, i.e.higher is better
     }   
   };
   }
@@ -479,6 +479,5 @@ public class L2Cache implements Level2Cache{
     long elapsed = System.currentTimeMillis() - created;
     elapsed >>>= 10;// shift is way faster than div 1000 to get the seconds and it's 2% off, which is ok
     return (int) elapsed;    
-  }
-  
+  }  
 }
