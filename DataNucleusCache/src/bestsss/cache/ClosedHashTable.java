@@ -1,5 +1,6 @@
 package bestsss.cache;
 
+import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,18 +35,20 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   private static final Object TOMBSTONE = "TOMBSTONE".toCharArray();//must not have equals
   private static final int MAX_SEGMENT_LENGTH = 1<<29;
 
-  private final int hashSeed = RANDOM.nextInt();//randomness on each start
+  private final int hashSeed = BigInteger.probablePrime(32,RANDOM).intValue();//randomness on each start
 
 
   private final Segment[] segments;//sort of need volatile read/write
-
-  private float loadFactor = 0.6f;
+  private final int shiftSegment;
+  
+  private float loadFactor = 0.67f;
 
   public ClosedHashTable(){
     Segment[] segments = new Segment[4 * nextPow2(Math.max(2,CPUs))];
     for (int i = 0; i < segments.length; i++) {
       segments[i] = new Segment(32, loadFactor, new ReentrantLock());
     }
+    this.shiftSegment = Integer.numberOfLeadingZeros(segments.length);
     this.segments = segments;
   }
 
@@ -180,8 +183,8 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     } 
   }
 
-  private static int segmentIndex(int hash, int length) {
-	return hash& (length-1);
+  private int segmentIndex(int hash, int length) {
+    return (hash>>>shiftSegment) & (length-1);
   }
 
   private Segment resizeSegment(final Segment s, final int segmentIndex) {
@@ -228,7 +231,8 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
       resized.addSize(size);
 
-      segments[segmentIndex] = resized;//XXX FIXME lack of volatile (for now)
+      segments[segmentIndex] = resized;
+      s.replacement = resized;//force volatile write, get reads replacement
       return resized;
     }finally{
       s.lock.unlock(); 
@@ -267,7 +271,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   private boolean closeDeletion(Segment s, int d, final int len) {
 	//Knuth Section 6.4
 	
-	//deletion attempts to lock the cells
+    //deletion attempts to lock the cells
     //and proceed with freeing up the TOMBSTONE 
     //if any locking fails, skip over
 
@@ -332,7 +336,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
 
   private static void processLoopCounter(int loop) {
     if (CPUs==1 || (loop & 0x3ff)==0x3ff){//1023, park a bit
-      LockSupport.parkNanos(TimeUnit.MICROSECONDS.toNanos(500));
+      LockSupport.parkNanos(TimeUnit.MICROSECONDS.toNanos(100*Math.min(10, 1+(loop>>>10))));//increase sleep each time
       return;
     }
 
@@ -345,10 +349,11 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     final int hash = hash(key);
     Segment segment = selectSegment(hash);
 
-    for (int len=segment.length(), i=index(hash, len),loops=0;; ) {
+    for (int len=segment.length(), i=index(hash, len),loops=0;;) {
       final int lock = segment.getChangeLock(i);
-      if (Segment.isLocked(lock)){//locked, technically can skip and look at the next but collisions should not be so common to warrant very high complexity
-        processLoopCounter(loops);
+      if (Segment.isLocked(lock)){//locked, technically can skip and look at the next element in the array
+        //but collisions should not be so common to warrant very high complexity
+        processLoopCounter(loops++);
         continue;
       }
 
@@ -360,7 +365,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
 
       if (lock != segment.getChangeLock(i)){
-        processLoopCounter(loops);
+        processLoopCounter(loops++);
         continue;
       }
 
@@ -368,11 +373,19 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         return (V) loadedValue;
       }
       i = nextKeyIndex(i, len);
+      if (segment.replacement!=null){//force replacement+
+        Segment sPrime = selectSegment(hash);//set in the main array when done
+        if (sPrime!=segment){
+          segment = sPrime;
+          len = segment.length();
+          i=index(hash, len);
+        }        
+      }
     }   
   }
 
   private Segment selectSegment(int hash) {
-	Segment[] segments = this.segments; 
+    Segment[] segments = this.segments; 
     return segments[segmentIndex(hash, segments.length)] ;
   }
 
@@ -384,7 +397,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     int h = hashSeed;
 
     h ^= k.hashCode();
-
+//
     // Spread bits to regularize both segment and index locations,
     // using variant of single-word Wang/Jenkins hash.
     h += (h <<  15) ^ 0xffffcd7d;
@@ -392,7 +405,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     h += (h <<   3);
     h ^= (h >>>  6);
     h += (h <<   2) + (h << 14);
-    return h ^ (h >>> 16);//lowest bit must be zero
+    return h ^ (h >>> 16);
   }
 
   private static int nextKeyIndex(int i, int len) {
@@ -525,39 +538,49 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     //Probabilistic expiration
     final ThreadLocalRandom random = ThreadLocalRandom.current();
 
-
-    final Segment segment = highSizedSegment(random);
-    final int length = segment.length();
-    final int sampleSize = Math.min( entries * 17, length>>>1) ;//k=17 should be 99% chance to hit bottom 15%
-
-    final Object[] sample = new Object[sampleSize*2];
-    
-    final FastIntSet set = new FastIntSet(sampleSize);    
-
+    final int sampleSize = entries * 21 ;//k=17 should be 99% chance to hit bottom 15%
     int i=0;
-    for(int retries = Math.max(1, (sampleSize>>>2)); i<sampleSize && retries>0;){//find not locked keys in the entire set 
-      final int index = random.nextInt(length) & (Integer.MAX_VALUE-1);//lowest bit is 0, so always a key
-      if (set.contains(index)){
-        retries--;
+    final Object[] sample = new Object[sampleSize*2];
+
+    int maxTestSegments= Math.min(4, this.segments.length);
+    final Segment[] segments=this.segments;
+    ArrayList<Segment> testedSegments =new ArrayList<>(maxTestSegments);
+    
+    for(;i<sample.length && testedSegments.size()<maxTestSegments;){
+      final Segment segment = segments[random.nextInt(segments.length)];
+      if (testedSegments.contains(segment)){
         continue;
       }
-      final int lock = segment.getChangeLock(index);
+      testedSegments.add(segment);
 
-      if (Segment.isLocked(lock)){
-        retries--;         
-        continue;
-      }
-      final Object key = segment.get(index);
-      final Object value = segment.get(index+1);
+      final int length = segment.length();    
+      final FastIntSet set = new FastIntSet(sampleSize);    
 
-      if (lock!=segment.getChangeLock(index) || key==null || key==TOMBSTONE){
-        retries--;
-        continue;
-      }
 
-      sample[i++]=key;
-      sample[i++]=value;
-      set.add(index);//mark as processed
+      for(int retries = Math.max(1, sampleSize>>1); i<sample.length && retries>0;){//find not locked keys in the entire set 
+        final int index = random.nextInt(length) & (Integer.MAX_VALUE-1);//lowest bit is 0, so always a key
+        if (set.contains(index)){
+          retries--;
+          continue;
+        }
+        final int lock = segment.getChangeLock(index);
+
+        if (Segment.isLocked(lock)){
+          retries--;         
+          continue;
+        }
+        final Object key = segment.get(index);
+        final Object value = segment.get(index+1);
+
+        if (key==null || key==TOMBSTONE || lock!=segment.getChangeLock(index)){//null is quite common, check it 1st
+          retries--;
+          continue;
+        }
+
+        sample[i++]=key;
+        sample[i++]=value;
+        set.add(index);//mark as processed
+      }    
     }
     int count = i>>>1;
     CacheComparator<Integer> x=new CacheComparator<Integer>(){
@@ -576,28 +599,17 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     }
     return keys;
   }
-  private Segment highSizedSegment(ThreadLocalRandom r){
-    Segment[] segments=this.segments;
-    int len = segments.length;
-    
-    Segment seg1 = segments[r.nextInt(len)];
-    Segment seg2 = segments[r.nextInt(len)];
-    Segment seg3 = segments[r.nextInt(len)];
-    int s1 = seg1.size();
-    int s2 = seg2.size();
-    int s3 = seg3.size();
-    return s1>s2? ((s1>s3)?seg1:seg3) : (s2>s3?seg2:seg3);
-  }
+  
   public void clear() {    
-	final Segment[] segments = this.segments;
-	for (int i=0;i<segments.length;i++){
-	  Segment s  = segments[i];
-	  s.lock.lock();
-	  try{
-		segments[i] = new Segment(32, loadFactor, s.lock);
-	  }finally{
-		s.lock.lock();
-	  }
-	}
+    final Segment[] segments = this.segments;
+    for (int i=0;i<segments.length;i++){
+      Segment s  = segments[i];
+      s.lock.lock();
+      try{
+        segments[i] = new Segment(32, loadFactor, s.lock);
+      }finally{
+        s.lock.lock();
+      }
+    }
   }
 }
