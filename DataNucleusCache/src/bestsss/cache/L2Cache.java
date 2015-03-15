@@ -133,7 +133,7 @@ public class L2Cache implements Level2Cache{
       @Override
       public int compare(Object[] o1, Object[] o2) {
         boolean e1 = isExpired(o1, time);
-        boolean e2 = isExpired(o1, time);
+        boolean e2 = isExpired(o2, time);
 
         return e1==e2?0: (e1?-1:1);
       }   
