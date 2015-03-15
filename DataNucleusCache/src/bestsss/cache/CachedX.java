@@ -95,27 +95,28 @@ public class CachedX<T> extends CachedPC<T>{
     allFields[f] = value;
   }
 
-  static int[] getFlagsSetTo(Object[] flags, boolean state){
-      int[] temp = new int[flags.length];
-      int j = 0;
-      for (int i = 0; i < flags.length; i++){
-          if ((flags[i]!=NOT_PRESENT) == state){
-              temp[j++] = i;
-          }
-      }
-      if (j==temp.length)
-        return temp;
-      
-      if (j==0)
-        return null;
-      
-      return Arrays.copyOf(temp, j);
-  }
-  
-  @Override
-  public int[] getLoadedFieldNumbers() {
-    return getFlagsSetTo(allFields, true);
-  }
+   private static int[] getFlagsSetTo(Object[] fields, int length){
+     length = Math.min(fields.length, length);
+     final int[] result = new int[length];
+     int j = 0;
+     for (int i = 0; i < result.length; i++){
+       if (fields[i]!=NOT_PRESENT){
+         result[j++] = i;
+       }
+     }
+     if (j==result.length)
+       return result;
+
+     if (j==0)
+       return null;//returning null is bad, yet mimic ClassUtil.getFlagsSetTo
+
+     return Arrays.copyOf(result, j);
+   }
+
+   @Override
+   public int[] getLoadedFieldNumbers() {
+     return getFlagsSetTo(allFields, this.length);
+   }
   
 
   @Override
