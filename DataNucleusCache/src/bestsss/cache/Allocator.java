@@ -12,7 +12,7 @@ import java.util.Arrays;
   * @author Stanimir Simeonoff
  */
 //allocates new arrays up for 256-4 fields
-public class Allocator {
+class Allocator {
   private static final int SHIFT = 2;//each 4 size share same element;
 
   private static final int OR = (1<<SHIFT)-1;

@@ -48,19 +48,19 @@ class ArrayUtil {
   }
   static void incHitCount(Object[] fields){
     final int idx = fields.length - HITS;
-	Object n = fields[idx];
+  Object n = fields[idx];
     if (n instanceof Integer){
       n = IntegerProvider.get( ((Integer)n)+1);//this requires CAS not to miss some elements but we can live with non-precise
     } else{ 
       n = IntegerProvider.ZERO;
     }
-    fields[idx] = n;	
+    fields[idx] = n;  
   }
   
   static void setTimeAndHitCount(Object[] fields, int time){
     //increase hit count 
     //and set time    
-	incHitCount(fields);
+  incHitCount(fields);
     fields[fields.length - TIME] = IntegerProvider.get(time);
   }
 
@@ -72,6 +72,6 @@ class ArrayUtil {
     return (Integer) o1[o1.length - HITS];
   }
   public static Class<?> getClass(Object[] o1) {
-	return (Class<?>)o1[o1.length - CLASS];
+  return (Class<?>)o1[o1.length - CLASS];
   }
 }
