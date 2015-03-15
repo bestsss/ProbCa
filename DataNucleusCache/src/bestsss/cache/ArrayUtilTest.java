@@ -5,10 +5,13 @@ import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
-/**
+/*
  * Written by Stanimir Simeonoff and released as public domain as described at
  * http://creativecommons.org/publicdomain/zero/1.0/
- * @author Stanimir Simeonoff
+ */
+
+ /**
+  * @author Stanimir Simeonoff
  */
 public class ArrayUtilTest {
   @Test

@@ -4,7 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @copyright Playtech 2014
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
  * @author Stanimir Simeonoff
  */
 public class SyncHashMap<K,V> extends HashMap<K, V>{

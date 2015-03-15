@@ -18,12 +18,19 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 import bestsss.cache.sort.CacheComparator;
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
+
 /**
+ *
+ * 
  * CloseHashTable, i.e. open addressing
  * Main aim is low memory footprint and less garbage collection pressure, along with reasonable concurrency.
- * 
- * @author Stanimir Simeonoff
  *
+ * @author Stanimir Simeonoff
+ * 
  * @param <K>
  * @param <V>
  */

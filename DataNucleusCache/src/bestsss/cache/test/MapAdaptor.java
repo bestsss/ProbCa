@@ -4,7 +4,11 @@ import java.util.AbstractMap;
 import java.util.Set;
 
 import bestsss.cache.ClosedHashTable;
-
+/**
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Stanimir Simeonoff
+ */
 public class MapAdaptor<K,V> extends AbstractMap<K, V> {
   final ClosedHashTable<K, V> table = new ClosedHashTable<>();
   

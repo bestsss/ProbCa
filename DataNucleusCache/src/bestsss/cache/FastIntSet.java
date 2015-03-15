@@ -1,5 +1,12 @@
 package bestsss.cache;
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
 
+ /**
+  * @author Stanimir Simeonoff
+ */
 class FastIntSet {
   private final int[] table;//no rehash
 

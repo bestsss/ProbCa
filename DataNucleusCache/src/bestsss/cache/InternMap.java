@@ -4,7 +4,14 @@ import java.math.BigInteger;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
 
+ /**
+  * @author Stanimir Simeonoff
+ */
 public class InternMap<E> {
   @SuppressWarnings("serial")
   private static class Node<E> extends AtomicInteger{

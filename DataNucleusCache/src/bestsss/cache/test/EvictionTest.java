@@ -10,7 +10,14 @@ import org.junit.Test;
 
 import bestsss.cache.ClosedHashTable;
 import bestsss.cache.sort.Smoothsort;
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
 
+ /**
+  * @author Stanimir Simeonoff
+ */
 public class EvictionTest {
   @Test
   public void eviction(){

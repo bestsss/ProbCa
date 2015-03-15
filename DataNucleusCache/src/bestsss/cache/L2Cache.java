@@ -16,7 +16,14 @@ import org.datanucleus.cache.CachedPC;
 import org.datanucleus.cache.Level2Cache;
 import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.metadata.AbstractMemberMetaData;
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
 
+ /**
+  * @author Stanimir Simeonoff
+ */
 //all PCs are stored as Object[] (similar to JCredo), it's a lot better than the current CachedPC which is very memory unfriendly
 public class L2Cache implements Level2Cache{
   

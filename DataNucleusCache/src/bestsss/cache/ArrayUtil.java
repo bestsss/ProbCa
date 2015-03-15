@@ -4,6 +4,14 @@ import java.util.Arrays;
 
 import org.datanucleus.cache.CachedPC;
 
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
+
+ /**
+  * @author Stanimir Simeonoff
+ */
 class ArrayUtil {
   private static final int CLASS = 1;
   private static final int VERSION = 2;

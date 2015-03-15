@@ -12,7 +12,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import bestsss.cache.ClosedHashTable;
-
+/**
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ * @author Stanimir Simeonoff
+ */
 public class TableTest {
   private static final Long[] keys = new Long[1<<20];
   @BeforeClass public static void init(){

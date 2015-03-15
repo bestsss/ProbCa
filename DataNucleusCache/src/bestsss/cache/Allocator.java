@@ -3,7 +3,15 @@ package bestsss.cache;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 
-//allocates new arrays up for 256 fields
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
+
+ /**
+  * @author Stanimir Simeonoff
+ */
+//allocates new arrays up for 256-4 fields
 public class Allocator {
   private static final int SHIFT = 2;//each 4 size share same element;
 

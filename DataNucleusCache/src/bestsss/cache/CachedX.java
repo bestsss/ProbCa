@@ -5,6 +5,14 @@ import java.util.Arrays;
 
 import org.datanucleus.cache.CachedPC;
 
+/*
+ * Written by Stanimir Simeonoff and released as public domain as described at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
+
+ /**
+ * @author Stanimir Simeonoff
+ */
 public class CachedX<T> extends CachedPC<T>{
   private static final long serialVersionUID = 0L;
   
