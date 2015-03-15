@@ -95,6 +95,9 @@ public class InternMap<E> {
   
   private E getOrAddBelowSize(E e, int hash) {
     final AtomicReferenceArray<Node<E>> table = this.table;
+    if (table==null)//prevent traps below
+      return e;
+    
     for (int len=length, i=index(hash, len), maxAttempts=len>>4;;i=nextKeyIndex(i, len)){
       Node<E> value = table.get(i);
       if (value==null){        
