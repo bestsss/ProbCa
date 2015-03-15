@@ -1,6 +1,5 @@
 package bestsss.cache.test;
 
-import java.util.Collections;
 import java.util.Random;
 
 import org.junit.Assert;
