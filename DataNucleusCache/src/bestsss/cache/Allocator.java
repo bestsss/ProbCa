@@ -8,7 +8,7 @@ public class Allocator {
   private static final int SHIFT = 2;//each 4 size share same element;
 
   private static final int OR = (1<<SHIFT)-1;
-  private static final int MASK = -(1<<SHIFT); //~(OR-1);//zero last 2 bits, so it's always div by 4
+  private static final int MASK = ~OR; //zero last 2 bits, so it's always div by 4
 
   final int maxPooled;
   final ArrayDeque<Object[]>[] pools;
