@@ -17,8 +17,8 @@ import bestsss.cache.CachedX;
  */
 public class AllocatorTest {
   public void testPoll(Allocator allocator, int len){          
-    Object[] o;
-    Assert.assertTrue((o=allocator.get(len)).length>=len);
+    Object[] o=allocator.get(len);
+    Assert.assertTrue(o.length>=len);
     Assert.assertTrue(allocator.offer(o));
     Assert.assertSame(o, allocator.get(len));
     for(int i=0;i<o.length;i++){
