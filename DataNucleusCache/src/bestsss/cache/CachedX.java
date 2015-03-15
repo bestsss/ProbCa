@@ -68,7 +68,7 @@ public class CachedX<T> extends CachedPC<T>{
 
   @Override
   public boolean[] getLoadedFields() {
-    boolean[] result = new boolean[length];
+    boolean[] result = new boolean[Math.min(length, allFields.length)];//reduce the latice, remove bound checks
     for (int i=0;i<result.length;i++){
       result[i] = allFields[i]!=NOT_PRESENT;
     }
