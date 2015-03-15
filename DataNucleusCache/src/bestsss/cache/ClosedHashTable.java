@@ -28,7 +28,8 @@ import bestsss.cache.sort.CacheComparator;
  * 
  * CloseHashTable, i.e. open addressing
  * Main aim is low memory footprint and less garbage collection pressure, along with reasonable concurrency.
- *
+ * Presently in MapLoops tests in java.util.concurrent this implementation outperforms java7's CHM.
+ *  
  * @author Stanimir Simeonoff
  * 
  * @param <K>
