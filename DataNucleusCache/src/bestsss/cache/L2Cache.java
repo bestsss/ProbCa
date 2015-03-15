@@ -334,21 +334,24 @@ public class L2Cache implements Level2Cache{
   }
   
   private void performExpiration() {
-	final long statsTime = stats.time();
-	final int entries = Math.max(16, maxElements>>>11);
-	final int time = time();
-	
-	final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));
-	for (Object key:keys){
-	   Object v = table.get(key);
-	   if (!(v instanceof Object[]))
-		 continue;
-	   if (!isExpired((Object[]) v, time))
-		 break;
-	   
-	   evictImpl(key);
-	}
-	stats.recordExpiration(stats.time() - statsTime, keys.size());
+    for(int i=0, delta=1;i<3 && delta>0;i++){
+      final long statsTime = stats.time();
+      final int entries = Math.max(delta, Math.max(16, maxElements>>>10));
+      final int time = time();
+      
+      final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));
+      for (Object key:keys){
+        Object v = table.get(key);
+        if (!(v instanceof Object[]))
+          continue;
+        if (!isExpired((Object[]) v, time))
+          break;
+  
+        evictImpl(key);
+      }
+      stats.recordExpiration(stats.time() - statsTime, keys.size());
+      delta = table.size() - maxElements;
+    }
   }
   
   private Object[] toArray(CachedPC<?> pc) {
