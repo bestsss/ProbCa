@@ -45,7 +45,7 @@ class Allocator {
   }
 
   void offer(Object[] array){
-	if (array.length!=length(length(MASK)))
+	if (array.length!=length(array.length))
 	  return;
 	
     final ArrayDeque<Object[]> pool = getPool(idx(array.length));
