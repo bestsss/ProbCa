@@ -140,10 +140,10 @@ public class L2Cache implements Level2Cache{
     };
   }
 
-  boolean isExpired(Object[] o1, int time){
-    int time1 =  ArrayUtil.getTime(o1);
-    ClassMeta m1 = getMeta(ArrayUtil.getClass(o1));
-    return time - time1 > m1.expiration;
+  boolean isExpired(Object[] o1, int time){//keep it package private, avoid bridge methods
+    int created =  ArrayUtil.getTime(o1);
+    ClassMeta meta = getMeta(ArrayUtil.getClass(o1));
+    return time - created > meta.expiration;
   }
 
 
