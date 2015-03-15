@@ -100,7 +100,7 @@ public class InternMap<E> {
           }
           
           if (size.get()<capacity()){
-            i=index(hash, length);//start over
+            i=index(hash, len);//start over
             continue;
           }
         }
