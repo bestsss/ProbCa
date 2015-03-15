@@ -73,7 +73,7 @@ public class InternMap<E> {
         selected = idx;
       }        
     }
-    if (count>7 && ref!=null){
+    if (count>7 && ref!=null){//under load that ref might have been changed and even be the top dog, but we just expunge it
       if (table.compareAndSet(selected, ref, null)){                 
         size.decrementAndGet();
       }      
