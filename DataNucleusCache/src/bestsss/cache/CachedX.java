@@ -10,7 +10,12 @@ import org.datanucleus.cache.CachedPC;
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
- /**
+/**
+ * Replacement of the vanilla org.datanucleus.cache.CachedPC.
+ * The class doesn't rely on a HashMap that's very memory intense as it requires a HashMap.Entry per each loaded field. 
+ * Instead it utilizes a plain Object[] that serves as a replacement of the "boolean[] loadedFields".
+ * Unless there are very few loaded fields the class is a clear win, also the access to the Object[] offers a lot better spacial caching properties.
+ * 
  * @author Stanimir Simeonoff
  */
 public class CachedX<T> extends CachedPC<T>{
