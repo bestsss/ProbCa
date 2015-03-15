@@ -102,7 +102,7 @@ public class InternMap<E> {
   
   private E getOrAddBelowSize(E e, int hash) {
     final AtomicReferenceArray<Node<E>> table = this.table;
-//    if (table==null)//prevent traps below, the code seems to degrate performance, though, which is weird
+//    if (table==null)//prevent traps below, the code seems to degrade performance, thoug (which is weird)
 //      return e;
 
     //pretouch table right here with .length()
