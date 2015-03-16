@@ -409,10 +409,19 @@ public class L2Cache implements Level2Cache{
 
   @Override
   public boolean containsOid(Object oid) {
-    return table.get(oid)!=null;
+    return increaseHitCount(table.get(oid))!=null;
   }
 
+
   ////////////////////
+  private Object increaseHitCount(Object object) {
+    if (!(object instanceof Object[]))      
+      return null;
+    Object[] array = (Object[]) object;
+    ArrayUtil.incHitCount(array);
+    return object;
+  }
+  
   private CachedPC<?> assembleCachedPC(Object object, Object key) {
     if (!(object instanceof Object[]))      
       return null;
