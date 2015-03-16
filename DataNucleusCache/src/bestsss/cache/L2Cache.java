@@ -104,7 +104,7 @@ public class L2Cache implements Level2Cache{
     if (maxMem<0)
       return 1<<16;
 
-    return (int) ( maxMem/6656);//around 80k at 512MB
+    return (int) ( maxMem/8888);//around 60k at 512MB
   }
 
   static Comparator<Object[]> newEvictionComparator(){
@@ -158,7 +158,7 @@ public class L2Cache implements Level2Cache{
       }
 
       IdentityHashMap<Class<?>, ClassMeta> update = new IdentityHashMap<>(map);
-      map.put(clazz, classMeta);
+      update.put(clazz, classMeta);
       if (metaMap.compareAndSet(map, update)){
         return classMeta;
       }
@@ -201,7 +201,9 @@ public class L2Cache implements Level2Cache{
     }
   }
   private void evictImpl(Object key) {
-    recycle(table.put(key, null));
+    Object removed =table.put(key, null); 
+    recycle(removed);
+    stats.recordRemoval(removed);
   }
 
   @Override

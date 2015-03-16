@@ -50,8 +50,14 @@ public final class Stats implements CacheStatistics {
   }
   public void recordExpiration(long elapsedTime, int size) {
 	expirationTime.add(elapsedTime);
-	expirations.add(elapsedTime);
+	expirations.add(size);
   }
+
+  public void recordRemoval(Object removed) {
+    if (removed!=null)
+      removals.add(1);
+  }  
+
   @Override
   public double getEvictionTimeMillis(){
 	return evictionTime.doubleValue() /TimeUnit.NANOSECONDS.toMillis(1);
@@ -104,5 +110,5 @@ public final class Stats implements CacheStatistics {
   }
   public long time() {
 	return System.nanoTime();
-  }  
+  }
 }
