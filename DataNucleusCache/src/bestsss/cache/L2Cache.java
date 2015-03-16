@@ -349,16 +349,17 @@ public class L2Cache implements Level2Cache{
       final int time = time();
 
       final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));
+      int expired = 0;
       for (Object key:keys){
         Object v = table.get(key);
         if (!(v instanceof Object[]))
           continue;
         if (!isExpired((Object[]) v, time))
           break;
-
+        expired++;
         evictImpl(key);
       }
-      stats.recordExpiration(stats.time() - statsTime, keys.size());
+      stats.recordExpiration(stats.time() - statsTime, expired);
       delta = table.size() - maxElements;
     }
   }
