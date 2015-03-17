@@ -100,11 +100,15 @@ public class L2Cache implements Level2Cache{
     if (size>0)
       return size;
 
+    size = nucleusContext.getConfiguration().getIntProperty("datanucleus.cache.level2.size");
+    if (size>0)
+      return size;
+
     long maxMem = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax();
     if (maxMem<0)
       return 1<<16;
 
-    return (int) ( maxMem/8888);//around 60k at 512MB
+    return (int) ( maxMem/4678);//around 60k at 512MB
   }
 
   static Comparator<Object[]> newEvictionComparator(){
