@@ -23,7 +23,7 @@ class Allocator {
 
   @SuppressWarnings("unchecked")
   public Allocator(int maxPooled){
-    this.maxPooled = maxPooled>0?maxPooled:512;
+    this.maxPooled = maxPooled>0?maxPooled:1024;
     pools = new ArrayDeque[idx(256)];
     for (int i = 1; i < pools.length; i++) {//skip the zero length array
       pools[i]=new ArrayDeque<Object[]>();
@@ -69,7 +69,7 @@ class Allocator {
     zap(array);//zap before synchronized
     synchronized(pool){
       if (pool.size()< maxPooled){
-        pool.offer(array);
+        pool.offerFirst(array);//temporary fight vs concurrent use
       }
     }
     return true;

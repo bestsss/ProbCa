@@ -153,17 +153,18 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
               if (result==null){//previously the cell was empty
                 int size = segment.addSize(1);
                 if (size > segment.threshold){
-                  resizeSegment(segment, segmentIndex(hash, segments.length));
+                  resize(segment, hash);
                 }
               }
             } else{
               if (result!=null){//removal successful, reduce size, increase tombstones
                 segment.addSize(-1);
-                
-                if (segment.addTobmstone(1) > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
+                int tombstones  =  segment.addTobmstone(1);                
+                if (tombstones > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
                   expungeTombstones(segment);
-                }
-                
+                } else if (tombstones> (len>>>4)){
+                  closeDeletion(segment, i, len);
+                }                
               }
             }
 
@@ -171,7 +172,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
           }
 
           if (failures++>len >>> 3 && len<MAX_SEGMENT_LENGTH){
-            resizeSegment(segment, segmentIndex(hash, segments.length));          
+            resize(segment, hash);          
             break;//start all over          
           }
           
@@ -182,7 +183,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         i = nextKeyIndex(i, len);
         if (i==index(hash, len)){//started all over
           if (len<MAX_SEGMENT_LENGTH){
-            resizeSegment(segment, segmentIndex(hash, segments.length));
+            resize(segment, hash);
             break;
           }
           throw new IllegalStateException("No capacity");
@@ -247,13 +248,13 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     }
   }
 
-  private void expungeTombstones(Segment s) {
+  private int expungeTombstones(Segment s) {
     if (!s.lock.tryLock()){
-      return;
+      return  0;
     }    
     try{
       if (!s.casReplacement(null, s)){//can't CAS, someone else set it
-        return;
+        return  0;
       }
       try{
         int tombstones=0;
@@ -266,6 +267,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
           }
         }
         s.addTobmstone(-tombstones);
+        return tombstones;
       }finally{
         if (!s.casReplacement(s, null)){
           throw new AssertionError();
@@ -305,6 +307,9 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
       K k = (K) s.get(i);      
       if (k==null){
+        if (i==nextKeyIndex(startLock, len)){
+          s.lazySet(start, null);
+        }
         break;
       }
       if (k==TOMBSTONE){
@@ -356,8 +361,8 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   public V get(final K key){
     final int hash = hash(key);
     Segment segment = selectSegment(hash);
-
-    for (int len=segment.length(), i=index(hash, len),loops=0;;) {
+    
+    for (int len=segment.length(), i=index(hash, len),loops=0,tombstones=0,total=0;;) {
       final int lock = segment.getChangeLock(i);
       if (Segment.isLocked(lock)){//locked, technically can skip and look at the next element in the array
         //but collisions should not be so common to warrant very high complexity
@@ -376,20 +381,52 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         processLoopCounter(loops++);
         continue;
       }
-
-      if (loadedKey!=TOMBSTONE && equals(key, loadedKey)){
-        return (V) loadedValue;
+      
+      if (loadedKey!=TOMBSTONE ){
+        if (equals(key, loadedKey))
+          return (V) loadedValue;
       }
-      i = nextKeyIndex(i, len);
+      else{
+        if (++tombstones==(len>>>2)){//help expunge
+          if (total > len<<1){
+            resizeForGet(segment, hash);
+            tombstones = 0;
+          }
+          else if (expungeTombstones(segment)>0){
+            tombstones = 0;
+            i=index(hash, len);//start over
+            continue;
+          }
+        }
+        else if (tombstones==len>>1){
+          resizeForGet(segment, hash);          
+        }
+      }
+    
+      total++;
+      i = nextKeyIndex(i, len);      
       if (segment.replacement!=null){//force replacement+
         Segment sPrime = selectSegment(hash);//set in the main array when done
         if (sPrime!=segment){
           segment = sPrime;
           len = segment.length();
           i=index(hash, len);
+          tombstones = 0;
+          total = 0;          
         }        
       }
     }   
+  }
+
+  private void resizeForGet(Segment segment, int hash) {
+    if (resize(segment, hash)==segment && segment.length()<MAX_SEGMENT_LENGTH){;//breakpoint friendly
+      segment.lock.lock();
+      segment.lock.unlock();//wait for completion
+    }
+  }
+
+  private Segment resize(Segment segment, final int hash) {
+    return resizeSegment(segment, segmentIndex(hash, segments.length));
   }
 
   private Segment selectSegment(int hash) {

@@ -29,8 +29,8 @@ public class L2Cache implements Level2Cache{
 
   private static final long serialVersionUID = 1L;
 
-  private static final int MAX_EVICTION = 3;
-  private static final int MAX_EXPIRATION = 7;
+  private static final int MAX_EVICTION = 5;
+  private static final int MAX_EXPIRATION = 37;
 
   private final long created = System.currentTimeMillis();
 
@@ -108,7 +108,7 @@ public class L2Cache implements Level2Cache{
     if (maxMem<0)
       return 1<<16;
 
-    return (int) ( maxMem/4678);//around 60k at 512MB
+    return (int) ( maxMem/4678);//around 115k at 512MB
   }
 
   static Comparator<Object[]> newEvictionComparator(){

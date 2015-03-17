@@ -13,7 +13,7 @@ public class MapLoops {
     static int pinsert     = 60;
     static int premove     = 2;
     static int maxThreads  = Runtime.getRuntime().availableProcessors()*2;
-    static int nops        = 100000000;
+    static int nops        = 50000000;
     static int removesPerMaxRandom;
     static int insertsPerMaxRandom;
 
