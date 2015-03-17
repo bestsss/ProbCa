@@ -60,7 +60,7 @@ public final class Stats implements CacheStatistics {
 
   @Override
   public double getEvictionTimeMillis(){
-	return evictionTime.doubleValue() /TimeUnit.NANOSECONDS.toMillis(1);
+	return evictionTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
   }
 
   @Override
@@ -71,7 +71,7 @@ public final class Stats implements CacheStatistics {
 
   @Override
   public double getExpirationTimeMillis(){
-	return expirationTime.doubleValue() /TimeUnit.NANOSECONDS.toMillis(1);
+	return expirationTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
   }
 
   @Override
