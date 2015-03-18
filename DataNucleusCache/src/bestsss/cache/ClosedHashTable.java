@@ -43,6 +43,8 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   private static final Object TOMBSTONE = "TOMBSTONE".toCharArray();//must not have equals
   private static final int MAX_SEGMENT_LENGTH = 1<<29;
 
+  private static final boolean BAD_EXPUNGE = Boolean.getBoolean("ClosedHashTable.badExpunge");
+
   private final int hashSeed = BigInteger.probablePrime(32,RANDOM).intValue();//randomness on each start
 
 
@@ -164,14 +166,21 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
               if (result!=null){//removal successful, reduce size, increase tombstones
                 segment.addSize(-1);
                 int tombstones;
-                if (len>64 && (tombstones=segment.tombstones()) > (len>>>4) && closeDeletion(segment, i, len)){//try closeDeletion, if successful, dont cas the tombstones
+                if (len>64 && (tombstones=segment.tombstones()) > (len>>>5) ){//try closeDeletion, if successful, dont cas the tombstones
                   //do nothing, save the cas
+                  int closed = closeDeletion(segment, i, len)-1;
+                  if (closed>0){
+                    segment.addTobmstone(-closed);
+                  }
                 }
                 else {
                   tombstones  =  segment.addTobmstone(1);
                 }
-                if (tombstones > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
-                  expungeTombstones(segment);
+                if (tombstones > (len>>>4)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
+                  int expunged = expungeTombstones(segment);
+                  if (BAD_EXPUNGE && expunged>0 && expunged < tombstones>>1){
+                    badExpunge(segment, expunged);
+                  }
                 }               
               }              
             }
@@ -179,7 +188,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
             return result;
           }
 
-          if (failures++>len >>> 3 && len<MAX_SEGMENT_LENGTH){
+          if (failures++>len >>> 4 && len<MAX_SEGMENT_LENGTH){// 1/8 failures, increase the size
             resize(segment, hash);          
             break;//start all over          
           }
@@ -198,6 +207,10 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         }
       }
     } 
+  }
+
+  private void badExpunge(Segment s, int expunged) {    
+    System.err.println("badExpunged: "+expunged+" counted: "+s.countTombstones());
   }
 
   private int segmentIndex(int hash, int length) {
@@ -265,17 +278,15 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         return  0;
       }
       try{
-        int tombstones=0;
+        int closedTombstones=0;
         for (int len=s.length(), i=0; i<len;i+=2){
           if (s.get(i)!=TOMBSTONE){
             continue;
           }
-          if (closeDeletion(s, i, len)){
-            tombstones++;
-          }
+          closedTombstones+=closeDeletion(s, i, len);
         }
-        s.addTobmstone(-tombstones);
-        return tombstones;
+        s.addTobmstone(-closedTombstones);
+        return closedTombstones;
       }finally{
         if (!s.casReplacement(s, null)){
           throw new AssertionError();
@@ -286,7 +297,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     }   
   }
 
-  private boolean closeDeletion(Segment s, int d, final int len) {
+  private int closeDeletion(Segment s, int d, final int len) {
 	//Knuth Section 6.4
 	
     //deletion attempts to lock the cells
@@ -295,16 +306,16 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
 
     int start=d;    
     if (s.lock(start)<0){
-      return false;
+      return 0;
     }
     final int startLock = Segment.getLockIndex(start);
     if (s.get(start)!=TOMBSTONE){//not a tombstone under the lock, unlock and exit
       //no modification made, hacked unlock by reverting the value
       s.changeLock.decrementAndGet(startLock);
-      return false;
+      return 0;
     }
 
-
+    int result = 0;
     int lockIndex = startLock;    
     for (int i = nextKeyIndex(d, len);;i = nextKeyIndex(i, len)){
       if (lockIndex != Segment.getLockIndex(i)){
@@ -315,8 +326,9 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
       K k = (K) s.get(i);      
       if (k==null){
-        if (i==nextKeyIndex(startLock, len)){
+        if (result==0){
           s.lazySet(start, null);
+          result++;
         }
         break;
       }
@@ -337,10 +349,10 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         s.lazySet(i+1, null);
 
         d=i;//d is modified, one tombstone less, keep moving the rest, skip tombstones, though
+        result++;
       }
     }
-    final boolean result = d!=start;
-    
+
     for (int i=startLock; ;){
       int lock = s.changeLock.get(i);
       Segment.assertLocked(lock--);
@@ -558,6 +570,17 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       if (!isLocked(lock))
         throw new AssertionError();
     }
+    public int countTombstones(){
+      int tombstones=0;
+      for (int len=length(), i=0; i<len;i+=2){
+        if (get(i)!=TOMBSTONE){
+          continue;
+        }
+        tombstones++;        
+      }
+      return tombstones;   
+    }
+
   }
   /////////////////////////////////Tombstobes///////////////////////////////////
 
@@ -598,12 +621,12 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     //Probabilistic expiration
     final ThreadLocalRandom random = ThreadLocalRandom.current();
 
-    final int sampleSize = entries * 21 ;//k=17 should be 99% chance to hit bottom 15%
+    final int sampleSize = entries * 17 ;//k=17 should be 99% chance to hit bottom 15%
     int i=0;
     final Object[] sample = new Object[sampleSize*2];
 
-    int maxTestSegments= Math.min(4, this.segments.length);
     final Segment[] segments=this.segments;
+    int maxTestSegments= Math.min(4, segments.length);
     ArrayList<Segment> testedSegments =new ArrayList<>(maxTestSegments);
     
     for(;i<sample.length && testedSegments.size()<maxTestSegments;){
@@ -617,7 +640,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       final FastIntSet set = new FastIntSet(sampleSize);    
 
 
-      for(int retries = Math.max(1, sampleSize>>1); i<sample.length && retries>0;){//find not locked keys in the entire set 
+      for(int retries = Math.max(1, sampleSize>>2); i<sample.length && retries>0;){//find not locked keys in the entire set 
         final int index = random.nextInt(length) & (Integer.MAX_VALUE-1);//lowest bit is 0, so always a key
         if (set.contains(index)){
           retries--;
