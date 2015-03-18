@@ -20,7 +20,8 @@ public final class Stats implements CacheStatistics {
   private final LongAdder removals=new LongAdder();
   
   private final LongAdder evictions=new LongAdder();
-  private final LongAdder expirations=new LongAdder();
+  private final LongAdder expiriredElements=new LongAdder();
+  private final LongAdder expirationCount=new LongAdder();
   
   private final LongAdder evictionTime=new LongAdder();
   private final LongAdder expirationTime=new LongAdder();
@@ -50,7 +51,8 @@ public final class Stats implements CacheStatistics {
   }
   public void recordExpiration(long elapsedTime, int size) {
 	expirationTime.add(elapsedTime);
-	expirations.add(size);
+	expiriredElements.add(size);
+	expirationCount.add(1);
   }
 
   public void recordRemoval(Object removed) {
@@ -75,8 +77,11 @@ public final class Stats implements CacheStatistics {
   }
 
   @Override
-  public long getExpirations(){
-	return expirations.longValue();
+  public long getExpiredElements(){
+	return expiriredElements.longValue();
+  }
+  public long getExpirationCount(){
+    return expirationCount.longValue();
   }
     
 
