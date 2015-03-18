@@ -9,6 +9,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.datanucleus.NucleusContext;
@@ -29,7 +30,7 @@ public class L2Cache implements Level2Cache{
 
   private static final long serialVersionUID = 1L;
 
-  private static final int MAX_EVICTION = 5;
+  private static final int MAX_EVICTION = 7;
   private static final int MAX_EXPIRATION = 37;
 
   private final long created = System.currentTimeMillis();
@@ -92,7 +93,7 @@ public class L2Cache implements Level2Cache{
   public L2Cache(NucleusContext nucleusContext){
     this.nucleusContext = nucleusContext;
     this.maxElements = resolveMaxElements(nucleusContext);
-    this.allocator = new Allocator(nucleusContext.getConfiguration().getIntProperty("bestsss.l2cache.maxPooled"));
+    this.allocator =  new Allocator(nucleusContext.getConfiguration().getIntProperty("bestsss.l2cache.maxPooled"));
   }
 
   private static int resolveMaxElements(NucleusContext nucleusContext) {
@@ -115,21 +116,24 @@ public class L2Cache implements Level2Cache{
     return new Comparator<Object[]>() {          
       @Override
       public int compare(Object[] o1, Object[] o2) {
-        int time1 =  ArrayUtil.getTime(o1);
-        int hits1 = ArrayUtil.getHits(o1);
-        int v1 = calcEntryValue(time1, hits1);
-
-        int time2 = ArrayUtil.getTime(o2);
-        int hits2 = ArrayUtil.getHits(o2);
-        int v2 = calcEntryValue(time2, hits2);
+        int v1 = calcEvictionValue(o1);       
+        int v2 = calcEvictionValue(o2);
 
         return v1-v2;//lowest values are the ones to be evicted, i.e.higher is better
+      }
+
+      private int calcEvictionValue(Object[] o) {
+        int created =  ArrayUtil.getCreationTime(o);
+        int hits = ArrayUtil.getHits(o);
+        int access = ArrayUtil.getAccessTime(o);
+        int value = calcEntryValue(created, access, hits);
+        return value;
       }   
     };
   }
 
-  private static int calcEntryValue(int time, int hits){//the higher the better, each hit gives ~1.25seconds extra time
-    return time+( hits*5 >> 2);//time+5*hits/4
+  private static int calcEntryValue(int created, int accessed, int hits){//the higher the better, each hit gives ~1.25seconds extra time
+    return created+( hits*5 >> 2)+accessed*2;//time+5*hits/4
   }
 
   Comparator<Object[]> newExpirationComparator(final int time){
@@ -138,16 +142,20 @@ public class L2Cache implements Level2Cache{
       public int compare(Object[] o1, Object[] o2) {
         boolean e1 = isExpired(o1, time);
         boolean e2 = isExpired(o2, time);
-
+        
         return e1==e2?0: (e1?-1:1);
       }   
     };
   }
 
   boolean isExpired(Object[] o1, int time){//keep it package private, avoid bridge methods
-    int created =  ArrayUtil.getTime(o1);
     ClassMeta meta = getMeta(ArrayUtil.getClass(o1));
-    return time - created > meta.expiration;
+    int accessed =  ArrayUtil.getAccessTime(o1);
+    if (time-accessed > meta.expiration)
+      return true;
+    
+    int created =  ArrayUtil.getCreationTime(o1);    
+    return time-created>meta.expiration*4;
   }
 
 
@@ -184,12 +192,15 @@ public class L2Cache implements Level2Cache{
 
   @Override
   public void evict(Object oid) {
+    if (1==1)
+      return;
+    
     evictImpl(oid);
   }
 
   private void recycle(Object object) {
     if (object instanceof Object[]){
-      allocator.offer((Object[]) object);
+      allocator.offer((Object[]) object);      
     }
   }
 
@@ -204,10 +215,11 @@ public class L2Cache implements Level2Cache{
       evictImpl(key);
     }
   }
-  private void evictImpl(Object key) {
+  private boolean evictImpl(Object key) {
     Object removed =table.put(key, null); 
     recycle(removed);
     stats.recordRemoval(removed);
+    return removed!=null;
   }
 
   @Override
@@ -325,13 +337,13 @@ public class L2Cache implements Level2Cache{
       int delta = table.size() - maxElements;
       if (delta > 0){
         performEviction(delta);
-        evictionInfo.expiredAt = time();
+        evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EVICTION/2);//randomize
         return;
       }
     } 
     if (time - evictionInfo.expiredAt > MAX_EXPIRATION ){
       performExpiration();
-      evictionInfo.expiredAt = time();
+      evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EXPIRATION/2);//random expirations
     }
   }
 
@@ -340,10 +352,12 @@ public class L2Cache implements Level2Cache{
     final long statsTime = stats.time(); 
     int entries = Math.max(delta, Math.max(8, maxElements>>>11));
     Collection<Object> keys = table.getExpirable(entries,newEvictionComparator());
+    int evicted = 0;
     for (Object key:keys){
-      evictImpl(key);
+      if (evictImpl(key))
+        evicted++;
     }
-    stats.recordEviction(stats.time() - statsTime, keys.size());
+    stats.recordEviction(stats.time() - statsTime, evicted);
   }
 
   private void performExpiration() {
@@ -360,8 +374,9 @@ public class L2Cache implements Level2Cache{
           continue;
         if (!isExpired((Object[]) v, time))
           break;
-        expired++;
-        evictImpl(key);
+        if (evictImpl(key)){
+          expired++;
+        }
       }
       stats.recordExpiration(stats.time() - statsTime, expired);
       delta = table.size() - maxElements;
@@ -410,19 +425,19 @@ public class L2Cache implements Level2Cache{
   public boolean isEmpty() {
     return table.isEmpty();
   }
-
+  
   @Override
   public boolean containsOid(Object oid) {
-    return increaseHitCount(table.get(oid))!=null;
+    return touch(table.get(oid))!=null;
   }
 
 
   ////////////////////
-  private Object increaseHitCount(Object object) {
+  private Object touch(Object object) {
     if (!(object instanceof Object[]))      
       return null;
     Object[] array = (Object[]) object;
-    ArrayUtil.incHitCount(array);
+    ArrayUtil.setTimeAndHitCount(array, time());
     return object;
   }
   
@@ -448,11 +463,11 @@ public class L2Cache implements Level2Cache{
     Object version = array[--len];
 
     //touch the original array    
-    ArrayUtil.incHitCount(array);
+    ArrayUtil.setTimeAndHitCount(array, time());
     //need to clone in order to use the allocator, cloning would keep the object in the young gen
     //the array is small should go in the TLAB and die trivially within young gen
     //technically using ref counting and finalize can achieve similar effects but it's too expensive (finalize requires FinalReference and a wide global lock)    
-    CachedX<Object> result = new CachedX<Object>(clazz, array.clone(), array.length - ArrayUtil.RESERVED, version);        
+    CachedX<Object> result = new CachedX<Object>(clazz, allocator.maxPooled>0?array.clone():array, array.length - ArrayUtil.RESERVED, version);        
     return result;
   }
 
