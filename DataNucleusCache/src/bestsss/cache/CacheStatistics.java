@@ -16,8 +16,8 @@ public interface CacheStatistics {
   long getEvictions();
 
   double getExpirationTimeMillis();
-  long getExpirations();
-
+  long getExpiredElements();  
+  long getExpirationCount();
   
 
   long getHits();
