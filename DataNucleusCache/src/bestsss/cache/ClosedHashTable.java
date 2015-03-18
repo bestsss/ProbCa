@@ -110,7 +110,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
 
     for(;;){
       Segment segment = selectSegment(hash);
-      for (;segment.replacement!=null;){
+      for (;segment.isReplacementActive();){
         //resize (or deletion fix) in progress, don't help or anything (the expected architecture has too few cores) 
         segment.lock.lock();
         segment.lock.unlock();
@@ -134,17 +134,21 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
             //locked now, CAS ensure no changes to the loaded key, which we care about
             exit = segment.compareAndSet(i,loadedKey, isRemove?TOMBSTONE:key);//value==null, remove key as well
             if (exit){
-              result = (V) segment.getAndSet(i+1, value);//expensive a bit, lazy set is way cheaper
+//              result = (V) segment.getAndSet(i+1, value);//expensive a bit, lazy set is way cheaper
+              result = (V) segment.get(i+1);
+              segment.lazySet(i+1, value);
+              
             }
           }
           segment.unlock(i, lock);
 
           if (exit){
-            if (segment.replacement!=null){
+            if (segment.isReplacementActive()){
               //need to repeat the process
               //in the new segment now
               break;
             }
+            
             if (!isRemove){
               if (loadedKey==TOMBSTONE){
                 //replaced a tombstone, decrease their count
@@ -159,13 +163,17 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
             } else{
               if (result!=null){//removal successful, reduce size, increase tombstones
                 segment.addSize(-1);
-                int tombstones  =  segment.addTobmstone(1);                
+                int tombstones;
+                if (len>64 && (tombstones=segment.tombstones()) > (len>>>4) && closeDeletion(segment, i, len)){//try closeDeletion, if successful, dont cas the tombstones
+                  //do nothing, save the cas
+                }
+                else {
+                  tombstones  =  segment.addTobmstone(1);
+                }
                 if (tombstones > (len>>>3)){//more than 12.5% (should be 25%) tombstones, attempt to clear up
                   expungeTombstones(segment);
-                } else if (tombstones> (len>>>4)){
-                  closeDeletion(segment, i, len);
-                }                
-              }
+                }               
+              }              
             }
 
             return result;
@@ -403,7 +411,9 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         }
       }
     
-      total++;
+      if (++total>len){
+        resize(segment, hash);
+      }
       i = nextKeyIndex(i, len);      
       if (segment.replacement!=null){//force replacement+
         Segment sPrime = selectSegment(hash);//set in the main array when done
@@ -482,10 +492,15 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     public boolean casReplacement(Segment existing, Segment replacement) {
       return replacementUpdater.compareAndSet(this, existing, replacement);
     }
-
+    public boolean isReplacementActive(){
+      Segment replacement = this.replacement;
+      return replacement!=null && replacement!=this;
+    }
+    
     public int getChangeLock(int i){
       return changeLock.get(getLockIndex(i));
     }
+    
     /**
      * 
      * @param i
