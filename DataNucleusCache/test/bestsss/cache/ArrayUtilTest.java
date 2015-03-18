@@ -16,7 +16,7 @@ import org.junit.Test;
 public class ArrayUtilTest {
   @Test
   public void testWithRandom(){
-	Allocator allocator=new Allocator(0);
+	Allocator allocator=new Allocator(1024);
 	
 	testRandom(allocator);
 	
@@ -48,7 +48,7 @@ public class ArrayUtilTest {
 	Assert.assertEquals(ArrayUtil.getClass(a), getClass());
 
 	Assert.assertEquals(ArrayUtil.getHits(a), 0);
-	Assert.assertEquals(ArrayUtil.getTime(a), time);
+	Assert.assertEquals(ArrayUtil.getCreationTime(a), time);
 	for (int i=0; i<len; i++){
 	  Assert.assertEquals(a[i], (long) i);;
 	}
