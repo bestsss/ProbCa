@@ -17,7 +17,8 @@ class ArrayUtil {
   private static final int VERSION = 2;
   private static final int HITS = 3;
   private static final int TIME = 4;
-  static final int RESERVED = TIME;
+  private static final int ACCESS = 5;
+  static final int RESERVED = ACCESS;
 
   static Object[] newArray(CachedPC<?> pc, int length, Allocator allocator, int time) {
     length += RESERVED;
@@ -27,7 +28,8 @@ class ArrayUtil {
     fields[length-CLASS] = pc.getObjectClass();
     fields[length-VERSION] = pc.getVersion();
     fields[length-HITS] = IntegerProvider.ZERO;
-    fields[length-TIME] = IntegerProvider.get(time);    
+    fields[length-TIME] = IntegerProvider.get(time);
+    fields[length-ACCESS] = IntegerProvider.ZERO;
     return fields;
   }
 
@@ -46,7 +48,7 @@ class ArrayUtil {
   static int maxLength(Object[] allFields) {
     return allFields.length - RESERVED;
   }
-  static void incHitCount(Object[] fields){
+  private static void incHitCount(Object[] fields){
     final int idx = fields.length - HITS;
     Object n = fields[idx];
     if (n instanceof Integer){
@@ -54,17 +56,18 @@ class ArrayUtil {
     } else{ 
       n = IntegerProvider.ZERO;
     }
-    fields[idx] = n;  
+    fields[idx] = n;
+    
   }
-
+  
   static void setTimeAndHitCount(Object[] fields, int time){
     //increase hit count 
     //and set time    
     incHitCount(fields);
-    fields[fields.length - TIME] = IntegerProvider.get(time);
+    fields[fields.length - ACCESS] = IntegerProvider.get(time);
   }
 
-  public static int getTime(Object[] o1) {
+  public static int getCreationTime(Object[] o1) {
     return (Integer) o1[o1.length - TIME];
   }
 
@@ -73,5 +76,9 @@ class ArrayUtil {
   }
   public static Class<?> getClass(Object[] o1) {
     return (Class<?>)o1[o1.length - CLASS];
+  }
+
+  static int getAccessTime(Object[] o1) {
+    return (Integer) o1[o1.length - ACCESS];
   }
 }
