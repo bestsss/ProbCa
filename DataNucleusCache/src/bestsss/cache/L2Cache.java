@@ -12,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
+import jsr166e.ConcurrentHashMapV8;
+
 import org.datanucleus.NucleusContext;
 import org.datanucleus.cache.CachedPC;
 import org.datanucleus.cache.Level2Cache;
@@ -35,7 +37,7 @@ public class L2Cache implements Level2Cache{
 
   private final long created = System.currentTimeMillis();
 
-  Table<Object, Object[]> table = new ClosedHashTable<>();
+  final Table<Object, Object[]> table = new ConcurrentHashMapV8<>(); //new ClosedHashTable<>();
   private final int maxElements;//65536 default
   private final Stats stats = new Stats();
   private final ConcurrentHashMap<String, InternMap<Object>> globalInterns = new ConcurrentHashMap<String, InternMap<Object>>();

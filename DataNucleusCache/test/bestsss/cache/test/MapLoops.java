@@ -7,11 +7,12 @@ package bestsss.cache.test;
 
 import java.util.*;
 import java.util.concurrent.*;
+import jsr166e.*;
 
 public class MapLoops {
     static int nkeys       = 100000;
     static int pinsert     = 60;
-    static int premove     = 20;
+    static int premove     = 2;
     static int maxThreads  = Runtime.getRuntime().availableProcessors()*2;
     static int nops        = 10000000;
     static int removesPerMaxRandom;
@@ -30,7 +31,7 @@ public class MapLoops {
             }
         }
         else
-            mapClass = MapAdaptor.class;
+            mapClass = ConcurrentHashMapV8.class;
 
         if (args.length > 1)
             maxThreads = Integer.parseInt(args[1]);
@@ -148,10 +149,13 @@ public class MapLoops {
 
             if (x != null) {
                 if (x.intValue() != k.intValue())
-                    throw new Error("bad mapping: " + x + " to " + k);
+                  badMaping(k, x);
 
                 if (r < removesPerMaxRandom) {
-                    if (map.remove(k) != null) {
+                    
+                  if ((x=map.remove(k)) != null) {
+                    if (x.intValue() != k.intValue())
+                      badMaping(k, x);
                         position = total % key.length; // move from position
                         return 2;
                     }
@@ -167,6 +171,10 @@ public class MapLoops {
             //            total += LoopHelpers.compute1(k.intValue());
             total += r;
             return 1;
+        }
+
+        private void badMaping(Integer k, Integer x) throws Error {
+          throw new Error("bad mapping: " + x + " to " + k);
         }
 
         public void run() {

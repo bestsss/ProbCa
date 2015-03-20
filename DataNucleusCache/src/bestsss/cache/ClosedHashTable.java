@@ -18,10 +18,6 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 import bestsss.cache.sort.CacheComparator;
-/*
- * Written by Stanimir Simeonoff and released as public domain as described at
- * http://creativecommons.org/publicdomain/zero/1.0/
- */
 
 /**
  *
@@ -105,7 +101,158 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     return put((K) key, null);
   }
   
-  public V put(K key, V value){
+  public V put(K key, V value){//lock all through the bitter end of closeDeletion
+    final int hash = hash(key);
+    final boolean isRemove = value==null;
+    for(;;){
+      Segment segment = selectSegment(hash);
+      for (;segment.isReplacementActive();){
+        //resize (or deletion fix) in progress, don't help or anything (the expected architecture has too few cores) 
+        segment.lock.lock();
+        segment.lock.unlock();
+        segment = selectSegment(hash);      
+      }
+      Object result = TOMBSTONE;
+      final int len=segment.length();
+      int i=index(hash, len);
+      final int start=i;
+      int lockIndex=-1;
+      for (int loop=0, failures = 0;;) {
+        if (lockIndex!=Segment.getLockIndex(i) && segment.lock(i)<0){
+          processLoopCounter(loop++);
+          continue;
+        }
+        lockIndex=Segment.getLockIndex(i);
+        
+        final Object loadedKey = segment.get(i);
+        if (loadedKey==null || equals(key, loadedKey)){
+          result = loadedKey==null?null: (V) segment.get(i+1);
+          if (!isRemove){          
+//            if (loadedKey==null)
+//              segment.lazySet(i, key);
+            
+            if (!segment.compareAndSet(i, loadedKey, key)){
+              badKey(segment, loadedKey, key); 
+            }
+            segment.lazySet(i+1, value);
+                        
+          } 
+          else if (loadedKey!=null){//remove and found
+            segment.lazySet(i+1, null);
+            segment.lazySet(i, null);
+            closeDeletion2(segment, i, len, start);
+          }
+          break;
+        }
+        if (failures++ > (len>>>4)){
+          resize(segment, hash);
+          break;
+        }
+        i=nextKeyIndex(i, len);
+      }
+      
+      unlockFromTo(segment, start, i, len);
+      if (segment.isReplacementActive()){//start all over
+        continue;
+      }
+      if (result!=TOMBSTONE){
+        int delta = changeSize(result, isRemove);
+        segment.addSize(delta);
+        if (delta>0 && segment.size()>segment.threshold){
+          resize(segment, hash);
+        }
+        return (V) result;
+      }
+    }
+  }
+  private void unlockFromTo(Segment s, int first, int last, int len){
+    int startLock = Segment.getLockIndex(first);
+    int lastLock = Segment.getLockIndex(last);
+    
+    for (int i=startLock, idx=first; ;){
+      int lock = s.changeLock.get(i);
+      Segment.assertLocked(lock--);
+      s.rawUnlock(i, lock);
+      if (i==lastLock){
+        break;
+      }
+      int j;
+      for (;(j=Segment.getLockIndex(idx = nextKeyIndex(idx, len)))==i;);
+      i =j;
+    }    
+    
+  }
+  
+  private static int changeSize(Object result, boolean isRemove){
+    if (result==null){
+      return isRemove?0:1;//added, previously none
+    }
+    return  isRemove?-1:0;    
+  }
+  
+  private int closeDeletion2(Segment s, int deleted, final int len, int firstLocked) {
+    //Knuth Section 6.4
+    
+      //deletion attempts to lock the cells
+      //and proceed with freeing up the TOMBSTONE 
+      //if any locking fails, skip over
+//      LinkedHashMap<Integer, Integer> map=new LinkedHashMap<Integer, Integer>();
+      int start=-1,end=0;
+      boolean fullLoop = false;
+      int result = 0;
+      int lockCount=0;
+      int lockIndex = Segment.getLockIndex(deleted);
+      firstLocked= Segment.getLockIndex(firstLocked);
+      int i = nextKeyIndex(deleted, len);
+      for (int loop=0;;){
+        int currentLockIndex = Segment.getLockIndex(i);
+        
+        if (currentLockIndex==firstLocked)
+          fullLoop = true;
+        
+        if (!fullLoop &&  lockIndex != currentLockIndex){
+          int lockedValue;
+          if ((lockedValue=s.lock(i))<0){          
+            processLoopCounter(loop++);
+            continue;
+          }
+//          map.put(currentLockIndex, lockedValue);
+          lockCount++;
+          lockIndex = currentLockIndex;
+          if (start<0){
+            start =i;
+          }
+          end=i;
+        }
+        K k = (K) s.get(i);      
+        if (k==null){
+          break;
+        }
+
+        int r = index(hash(k), len);//natural position
+        if ((i < r && (r <= deleted || deleted <= i)) || (r <= deleted && deleted <= i)) {
+
+          Object value = s.get(i+1);
+
+          s.lazySet(deleted+1, value);
+          s.lazySet(deleted, k);//move the key after the value, zero denotes, no entry
+
+
+          s.lazySet(i, null);
+          s.lazySet(i+1, null);
+
+          deleted=i;
+          result++;
+        }
+        i = nextKeyIndex(i, len);
+      }
+      if (start>=0)
+        unlockFromTo(s, start, end, len);
+      
+      return result;
+    }
+
+  public V __put(K key, V value){
 
     final int hash = hash(key);
     final boolean isRemove = value==null;
@@ -217,7 +364,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     return (hash>>>shiftSegment) & (length-1);
   }
 
-  private Segment resizeSegment(final Segment s, final int segmentIndex) {
+  private Segment resizeSegmentImpl(final Segment s, final int segmentIndex) {
     final int length = s.length()<<1;
     if (length>MAX_SEGMENT_LENGTH){
       //expunge deleted
@@ -241,13 +388,23 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
       //fill the new segment with the exisiting elements, i.e. rehash
       int size=0;
-      for (int len=s.length(), i=0; i<len;i++){
-        K key = (K) s.get(i++);
-        if (key==null || key==TOMBSTONE){//skip empty and deleted
+      for (int len=s.length(), i=0; i<len;i+=2){
+        int lock = s.lock(i);
+        if (lock<0)
+          continue;
+        
+        K key = (K) s.get(i);
+        Object value = s.get(i+1);
+        s.unlock(i, lock);
+        
+        if (key==null || key==TOMBSTONE){//skip empty and deleted          
           continue;
         }
-
-        Object value = s.get(i);
+        
+        if (value==null ){
+          continue;
+        }
+        
         int index = index(hash(key), length);        
         for(;;){        
           if (resized.get(index)==null){
@@ -378,7 +535,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     }
   }
 
-  public V get(final K key){
+  public V get(final Object key){
     final int hash = hash(key);
     Segment segment = selectSegment(hash);
     
@@ -403,8 +560,12 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       }
       
       if (loadedKey!=TOMBSTONE ){
-        if (equals(key, loadedKey))
+        if (equals(key, loadedKey)){
+          if (!loadedKey.equals(loadedValue)){
+            badKey(segment, loadedKey, loadedValue);
+          }
           return (V) loadedValue;
+        }
       }
       else{
         if (++tombstones==(len>>>2)){//help expunge
@@ -440,6 +601,10 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     }   
   }
 
+  private void badKey(Segment segment, Object loadedKey, Object loadedValue) {
+    segment.countTombstones();
+  }
+
   private void resizeForGet(Segment segment, int hash) {
     if (resize(segment, hash)==segment && segment.length()<MAX_SEGMENT_LENGTH){;//breakpoint friendly
       segment.lock.lock();
@@ -448,7 +613,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
   }
 
   private Segment resize(Segment segment, final int hash) {
-    return resizeSegment(segment, segmentIndex(hash, segments.length));
+    return resizeSegmentImpl(segment, segmentIndex(hash, segments.length));
   }
 
   private Segment selectSegment(int hash) {
@@ -460,7 +625,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
     return key==loadedKey || key.equals(loadedKey);
   }
 
-  protected int hash(K k){
+  protected int hash(Object k){
     int h = hashSeed;
 
     h ^= k.hashCode();
@@ -525,7 +690,7 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
         return -1;//locked
       }
       if (!changeLock.compareAndSet(i, value, value+1)){//can't overlap here, as Integer.MAX_VALUE is odd
-        return -1;//locking failed
+        return -2;//locking failed
       }
       return value;
     }

@@ -12,8 +12,8 @@ import java.util.List;
  */
 public interface Table<K,V> {
   int size();
-  Object get(K key);
-  Object put(K key, V value);
+  V get(Object key);
+  V put(K key, V value);
   void clear();
   boolean isEmpty();
   
