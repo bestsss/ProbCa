@@ -1024,7 +1024,7 @@ public class ConcurrentHashMapV8<K,V>
      * @throws NullPointerException if the specified key or value is null
      */
     public V put(K key, V value) {
-        return putVal(key, value, false);
+        return value!=null?putVal(key, value, false):remove(key);
     }
 
     /** Implementation for put and putIfAbsent */
@@ -3342,7 +3342,7 @@ public class ConcurrentHashMapV8<K,V>
         implements Iterator<V>, Enumeration<V> {
         ValueIterator(Node<K,V>[] tab, int size, int index, int limit,
                       ConcurrentHashMapV8<K,V> map) {
-            super(tab, index, size, limit, map);
+            super(tab, size, index, limit, map);
         }
 
         public final V next() {
@@ -3362,7 +3362,7 @@ public class ConcurrentHashMapV8<K,V>
         implements Iterator<Map.Entry<K,V>> {
         EntryIterator(Node<K,V>[] tab, int size, int index, int limit,
                       ConcurrentHashMapV8<K,V> map) {
-            super(tab, index, size, limit, map);
+            super(tab, size, index, limit, map);
         }
 
         public final Map.Entry<K,V> next() {
@@ -3924,9 +3924,11 @@ public class ConcurrentHashMapV8<K,V>
 
       Node<K,V>[] t = this.table;
       int f = t == null ? 0 : t.length;
-      int start = ThreadLocalRandom.current().nextInt(Math.max(0, f-(sampleSize<<1 + sampleSize<<2)));
+      
+      int sampleLen = sampleSize+(sampleSize<<1) + (sampleSize<<2);
+      int start = ThreadLocalRandom.current().nextInt(Math.max(0, f-sampleLen));
 
-      EntryIterator<K,V> iteartor= new EntryIterator<K,V> (t, f, start, sampleSize, this);
+      EntryIterator<K,V> iteartor= new EntryIterator<K,V> (t, f, start, Math.min(f, start+sampleLen), this);
 
 
       CacheComparator<Map.Entry<K, V> > c = new CacheComparator<Map.Entry<K, V>>(){

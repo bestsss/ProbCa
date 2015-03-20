@@ -14,6 +14,7 @@ public interface Table<K,V> {
   int size();
   V get(Object key);
   V put(K key, V value);
+  V remove(K key);
   void clear();
   boolean isEmpty();
   

@@ -4,11 +4,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import jsr166e.ConcurrentHashMapV8;
+
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import bestsss.cache.ClosedHashTable;
+import bestsss.cache.Table;
 import bestsss.cache.sort.Smoothsort;
 /*
  * Written by Stanimir Simeonoff and released as public domain as described at
@@ -21,7 +24,7 @@ import bestsss.cache.sort.Smoothsort;
 public class EvictionTest {
   @Test
   public void eviction(){
-    ClosedHashTable<Integer, Integer> m = new ClosedHashTable<Integer, Integer>();
+    Table<Integer, Integer> m = new ConcurrentHashMapV8<Integer, Integer>();
     
     int loops = 1000000;
 //    java.util.Random r =new java.util.Random(119);

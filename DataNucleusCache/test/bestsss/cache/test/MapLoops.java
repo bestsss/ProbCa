@@ -10,11 +10,11 @@ import java.util.concurrent.*;
 import jsr166e.*;
 
 public class MapLoops {
-    static int nkeys       = 100000;
+    static int nkeys       = 1000;
     static int pinsert     = 60;
-    static int premove     = 2;
+    static int premove     = 39 ;
     static int maxThreads  = Runtime.getRuntime().availableProcessors()*2;
-    static int nops        = 10000000;
+    static int nops        = 1000000000;
     static int removesPerMaxRandom;
     static int insertsPerMaxRandom;
 
