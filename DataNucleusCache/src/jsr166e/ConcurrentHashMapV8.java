@@ -3925,7 +3925,7 @@ public class ConcurrentHashMapV8<K,V>
       Node<K,V>[] t = this.table;
       int f = t == null ? 0 : t.length;
       
-      int sampleLen = sampleSize+(sampleSize<<1) + (sampleSize<<2);
+      int sampleLen = sampleSize+(sampleSize>>1) + (sampleSize>>2);
       int start = ThreadLocalRandom.current().nextInt(Math.max(0, f-sampleLen));
 
       EntryIterator<K,V> iteartor= new EntryIterator<K,V> (t, f, start, Math.min(f, start+sampleLen), this);
