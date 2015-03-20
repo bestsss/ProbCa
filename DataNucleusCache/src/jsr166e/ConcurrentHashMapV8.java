@@ -26,6 +26,7 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -3924,11 +3925,8 @@ public class ConcurrentHashMapV8<K,V>
 
       Node<K,V>[] t = this.table;
       int f = t == null ? 0 : t.length;
-      
-      int sampleLen = sampleSize+(sampleSize>>1) + (sampleSize>>2);
-      int start = ThreadLocalRandom.current().nextInt(Math.max(0, f-sampleLen));
-
-      EntryIterator<K,V> iteartor= new EntryIterator<K,V> (t, f, start, Math.min(f, start+sampleLen), this);
+                
+      RandomTraverser<K,V> iteartor= new RandomTraverser<K,V> (t, f, sampleSize);
 
 
       CacheComparator<Map.Entry<K, V> > c = new CacheComparator<Map.Entry<K, V>>(){
@@ -3946,6 +3944,128 @@ public class ConcurrentHashMapV8<K,V>
       return Arrays.asList(result);
     }
 
+
+    
+    
+    static class RandomTraverser<K,V> implements Iterator<Map.Entry<K, V>>{
+      Node<K,V>[] tab;        // current table; updated if resized
+      Node<K,V> next;         // the next entry to use
+      TableStack<K,V> stack, spare; // to save/restore on ForwardingNodes
+      int index;              // index of bin to use next
+      int baseIndex;          // current index of initial table
+      int baseLimit;          // index bound for initial table
+      final int baseSize;     // initial table size
+      
+      
+      final int randoms[];
+      int nextRandomIdx;
+      RandomTraverser(Node<K,V>[] tab, int size, int limit) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        this.randoms=new int[limit];
+        for (int i=0;i<randoms.length;i++){
+          randoms[i]=random.nextInt(size);
+        }
+        Arrays.sort(randoms);
+        
+        this.tab = tab;
+          this.baseSize = size;
+          this.baseIndex = this.index = randoms[0];
+          this.baseLimit = size;
+          this.next = null;
+          advance();
+          
+          
+      }
+      public final boolean hasNext() { return next != null; }
+      public final boolean hasMoreElements() { return next != null; }
+
+      @Override
+      public Entry<K, V> next() {
+        Node<K,V> p;
+        if ((p = next) == null)
+            throw new NoSuchElementException();
+        K k = p.key;
+        V v = p.val;
+        advance();
+        return new MapEntry<K,V>(k, v, null);
+      }
+      
+      @Override
+      public void remove() {throw new UnsupportedOperationException(); }
+      /**
+       * Advances if possible, returning next valid node, or null if none.
+       */
+      final Node<K,V> advance() {
+          Node<K,V> e;
+          if ((e = next) != null)
+              e = e.next;
+          for (;;) {
+              Node<K,V>[] t; int i, n;  // must use locals in checks
+              if (e != null){
+                  if (nextRandomIdx+1<randoms.length)
+                    baseIndex = Math.max(baseIndex, randoms[++nextRandomIdx]);
+                  
+                  return next = e;
+              }
+              if (nextRandomIdx>=randoms.length || baseIndex >= baseLimit || (t = tab) == null ||
+                  (n = t.length) <= (i = index) || i < 0)
+                  return next = null;
+              if ((e = tabAt(t, i)) != null && e.hash < 0) {
+                  if (e instanceof ForwardingNode) {
+                      tab = ((ForwardingNode<K,V>)e).nextTable;
+                      e = null;
+                      pushState(t, i, n);
+                      continue;
+                  }
+                  else if (e instanceof TreeBin)
+                      e = ((TreeBin<K,V>)e).first;
+                  else
+                      e = null;
+              }
+              if (stack != null)
+                  recoverState(n);
+              else if ((index = i + baseSize) >= n)
+                index = ++baseIndex; // visit upper slots if present
+          }
+      }
+
+      /**
+       * Saves traversal state upon encountering a forwarding node.
+       */
+      private void pushState(Node<K,V>[] t, int i, int n) {
+          TableStack<K,V> s = spare;  // reuse if possible
+          if (s != null)
+              spare = s.next;
+          else
+              s = new TableStack<K,V>();
+          s.tab = t;
+          s.length = n;
+          s.index = i;
+          s.next = stack;
+          stack = s;
+      }
+
+      /**
+       * Possibly pops traversal state.
+       *
+       * @param n length of current table
+       */
+      private void recoverState(int n) {
+          TableStack<K,V> s; int len;
+          while ((s = stack) != null && (index += (len = s.length)) >= n) {
+              n = len;
+              index = s.index;
+              tab = s.tab;
+              s.tab = null;
+              TableStack<K,V> next = s.next;
+              s.next = spare; // save for reuse
+              stack = next;
+              spare = s;
+          }
+          if (s == null && (index += baseSize) >= n)
+              index = ++baseIndex;
+      }
+  }
     
     /* ---------------- Counters -------------- */
 
