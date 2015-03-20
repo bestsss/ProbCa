@@ -28,7 +28,7 @@ public class EvictionTest {
 
     Table<Integer, Integer> m = new ConcurrentHashMapV8<Integer, Integer>();
     
-    int loops = 1000000;
+    int loops = (int)1e6;
 //    java.util.Random r =new java.util.Random(119);
     int count = 0;
     for (int i=0;i<loops; i++){
@@ -43,7 +43,7 @@ public class EvictionTest {
     List<Integer> all=new ArrayList<Integer>();
     long nanos = -System.nanoTime();
     for (int i=0;i<17;i++){
-      List<Integer> c = m.getExpirable(8, Smoothsort.<Integer>naturalOrder());
+      List<Integer> c = m.getExpirable(16, Smoothsort.<Integer>naturalOrder());
       all.addAll(c);
       checkExp(c, max-expired, overThreshold);
       for (Integer n : c){

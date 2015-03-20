@@ -703,7 +703,7 @@ public class ConcurrentHashMapV8<K,V>
      * never be used in index calculations because of table bounds.
      */
     final int spread(int h) {
-      h^=hashSeed;
+      h*=hashSeed;
         return (h ^ (h >>> 16)) & HASH_BITS;
     }
 
@@ -3918,23 +3918,28 @@ public class ConcurrentHashMapV8<K,V>
 
     // -------------------------------------------------------
 //bestsss
+    private static class CacheComparatorX<K,V> extends CacheComparator<Map.Entry<K,V>> {      
+      private final Comparator<V> comparator;
+      CacheComparatorX(Comparator<V> comparator){
+        this.comparator =comparator;  
+      }
+      @Override
+      public int compare(java.util.Map.Entry<K, V> o1, java.util.Map.Entry<K, V> o2) {
+        return comparator.compare(o1.getValue(), o2.getValue());
+      }      
+    }
     
     @Override
     public List<K> getExpirable(int entries, final Comparator<V> comparator) {
-      int sampleSize = entries *17;
+      final int sampleSize = entries *17;
 
-      Node<K,V>[] t = this.table;
+      final Node<K,V>[] t = this.table;
       int f = t == null ? 0 : t.length;
                 
       RandomTraverser<K,V> iteartor= new RandomTraverser<K,V> (t, f, sampleSize);
 
 
-      CacheComparator<Map.Entry<K, V> > c = new CacheComparator<Map.Entry<K, V>>(){
-        @Override
-        public int compare(Map.Entry<K, V> o1, Map.Entry<K, V> o2) {
-          return comparator.compare(o1.getValue(), o2.getValue());
-        }                
-      };
+      CacheComparator<Map.Entry<K, V> > c = new CacheComparatorX<>(comparator);      
       Collection<Map.Entry<K, V>> least =  c.leastOf(iteartor, entries);
       K[] result =(K[]) new Object[least.size()];
       int i=0;
@@ -4002,9 +4007,10 @@ public class ConcurrentHashMapV8<K,V>
           for (;;) {
               Node<K,V>[] t; int i, n;  // must use locals in checks
               if (e != null){
-                  if (nextRandomIdx+1<randoms.length)
-                    baseIndex = Math.max(baseIndex, randoms[++nextRandomIdx]);
-                  
+                  if (++nextRandomIdx<randoms.length)
+                    baseIndex = index = Math.max(index, Math.max(baseIndex, randoms[nextRandomIdx]));
+                  else 
+                    e= null;
                   return next = e;
               }
               if (nextRandomIdx>=randoms.length || baseIndex >= baseLimit || (t = tab) == null ||
