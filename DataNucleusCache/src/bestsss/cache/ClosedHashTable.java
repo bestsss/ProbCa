@@ -200,7 +200,6 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
       int start=-1,end=0;
       boolean fullLoop = false;
       int result = 0;
-      int lockCount=0;
       int lockIndex = Segment.getLockIndex(deleted);
       firstLocked= Segment.getLockIndex(firstLocked);
       int i = nextKeyIndex(deleted, len);
@@ -211,13 +210,10 @@ public class  ClosedHashTable<K, V> implements Table<K, V>{
           fullLoop = true;
         
         if (!fullLoop &&  lockIndex != currentLockIndex){
-          int lockedValue;
-          if ((lockedValue=s.lock(i))<0){          
+          if ((s.lock(i))<0){          
             processLoopCounter(loop++);
             continue;
           }
-//          map.put(currentLockIndex, lockedValue);
-          lockCount++;
           lockIndex = currentLockIndex;
           if (start<0){
             start =i;
