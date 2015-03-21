@@ -113,26 +113,25 @@ public class L2Cache implements Level2Cache{
 
     return (int) ( maxMem/4678);//around 115k at 512MB
   }
+  private enum EvictionComparator implements Comparator<Object[]>{
+    instance;
+    @Override
+    public int compare(Object[] o1, Object[] o2) {
+      int v1 = calcEvictionValue(o1);       
+      int v2 = calcEvictionValue(o2);
 
-  static Comparator<Object[]> newEvictionComparator(){
-    return new Comparator<Object[]>() {          
-      @Override
-      public int compare(Object[] o1, Object[] o2) {
-        int v1 = calcEvictionValue(o1);       
-        int v2 = calcEvictionValue(o2);
+      return v1-v2;//lowest values are the ones to be evicted, i.e.higher is better
+    }
 
-        return v1-v2;//lowest values are the ones to be evicted, i.e.higher is better
-      }
-
-      private int calcEvictionValue(Object[] o) {
-        int created =  ArrayUtil.getCreationTime(o);
-        int hits = ArrayUtil.getHits(o);
-        int access = ArrayUtil.getAccessTime(o);
-        int value = calcEntryValue(created, access, hits);
-        return value;
-      }   
-    };
+    private static int calcEvictionValue(Object[] o) {
+      int created =  ArrayUtil.getCreationTime(o);
+      int hits = ArrayUtil.getHits(o);
+      int access = ArrayUtil.getAccessTime(o);
+      int value = calcEntryValue(created, access, hits);
+      return value;
+    }
   }
+
 
   private static int calcEntryValue(int created, int accessed, int hits){//the higher the better, each hit gives ~1.25seconds extra time
     return created+( hits*5 >> 2)+accessed*2;//time+5*hits/4
@@ -353,7 +352,7 @@ public class L2Cache implements Level2Cache{
     //expire 1/2048 at a time or at least 8
     final long statsTime = stats.time(); 
     int entries = Math.max(delta, Math.max(8, maxElements>>>11));
-    Collection<Object> keys = table.getExpirable(entries,newEvictionComparator());
+    Collection<Object> keys = table.getExpirable(entries, EvictionComparator.instance);
     int evicted = 0;
     for (Object key:keys){
       if (evictImpl(key))
