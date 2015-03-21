@@ -4,8 +4,10 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,7 +38,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   private static final long serialVersionUID = 1L;
 
   private static final int MAX_EVICTION = 7;
-  private static final int MAX_EXPIRATION = 37;
+  private static final int MAX_EXPIRATION = 23;
 
   private final long created = System.currentTimeMillis();
 
@@ -211,6 +213,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   @Override
   public void evictAll() {
     table.clear();
+    sharedExpirationIterator.set(null);
   }
 
   @Override
@@ -368,31 +371,69 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
         evicted++;
     }
     stats.recordEviction(stats.time() - statsTime, evicted);
-  }
-
-  private void performExpiration() {
-    for(int i=0, delta=1;i<3 && delta>0;i++){
-      final long statsTime = stats.time();
-      final int entries = Math.max(delta, Math.max(16, maxElements>>>10));
-      final int time = time();
-
-      final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));
-      int expired = 0;
-      for (Object key:keys){
-        Object v = table.get(key);
-        if (!(v instanceof Object[]))
-          continue;
-        if (!isExpired((Object[]) v, time))
-          break;
-        if (evictImpl(key)){
-          expired++;
-        }
-      }
-      stats.recordExpiration(stats.time() - statsTime, expired);
-      delta = table.size() - maxElements;
+    if (delta > 64 || sharedExpirationIterator.get()!=null){
+      sharedExpire();
     }
   }
 
+  private void performExpiration() {
+    final int delta = table.size() - maxElements;
+
+    final long statsTime = stats.time();
+    final int entries = Math.max(Math.min(128, delta), Math.max(16, maxElements>>>10));
+    final int time = time();
+
+    final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));
+    int expired = 0;
+    for (Object key:keys){
+      Object v = table.get(key);
+      if (!(v instanceof Object[]))
+        continue;
+      if (!isExpired((Object[]) v, time))
+        break;
+      if (evictImpl(key)){
+        expired++;
+      }
+    }
+    stats.recordExpiration(stats.time() - statsTime, expired);
+    if (delta - expired > 0 || sharedExpirationIterator.get()!=null){//doesn't matter if the size changes, we have reached the cap already
+      sharedExpire();
+    }
+  }
+  private static final java.util.Iterator<Object[]> BUSY_ITERATOR = Collections.<Object[]>emptyList().iterator();
+  //state:: "null" - no active expiration, BUSY_ITERATOR - some thread is performing shared expiration, valid iterator - free to grab and help
+  //--perhaps should use split iterator with removed impl-- (need to have at least 4 CPUs for such operation) 
+  private final AtomicReference<java.util.Iterator<Object[]>> sharedExpirationIterator=new AtomicReference<>(); 
+  void sharedExpire(){
+    java.util.Iterator<Object[]> i;
+    final AtomicReference<Iterator<Object[]>> sharedExpirationIterator = this.sharedExpirationIterator;
+    for(;;){
+      i = sharedExpirationIterator.get();
+      if (i==BUSY_ITERATOR)
+        return;
+      
+      java.util.Iterator<Object[]> expected = i;  
+      if (i==null)
+        i = ((ConcurrentHashMapV8<Object, Object[]>)table).values().iterator();
+      
+      if (sharedExpirationIterator.compareAndSet(expected, BUSY_ITERATOR)){//Locked state
+        break;
+      }           
+    }    
+    long start = stats.time();
+    final int time = time();
+    int expired = 0;
+    for (int loops=table.size()>>4;i.hasNext() && loops-->0;){// 1/16 a time
+      Object[] o = i.next();
+      if (isExpired(o, time)){
+        i.remove();
+        expired++;
+      }
+    }
+    sharedExpirationIterator.compareAndSet(BUSY_ITERATOR, i.hasNext()?i:null);
+    stats.recordExpiration(stats.time()-start, expired);
+  }
+  
   private Object[] toArray(CachedPC<?> pc) {
     if (pc instanceof CachedX<?>){
       return ((CachedX<?>) pc).getArray();
@@ -409,8 +450,11 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     for (int i=0; i<loaded.length; i++){
       if (!loaded[i])
         continue;
-
-      fields[i] = pc.getFieldValue(i);
+      Object o = pc.getFieldValue(i);
+      if (o instanceof Map){
+        o = MapReplacement.replacement((Map<?,?>)o);
+      }
+      fields[i] = o;
     }
 
     //process interns

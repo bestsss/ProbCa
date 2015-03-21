@@ -71,12 +71,19 @@ public class CachedX<T> extends CachedPC<T>{
     if (f<0 || f>=length){
       return null;
     }
-    return unmaskPresence(allFields[f]);
+    return unwrap(allFields[f]);
     
   }
 
-  private static Object unmaskPresence(Object value) {
-    return value!=NOT_PRESENT?value:null;
+  private static Object unwrap(Object value) {
+    if (NOT_PRESENT==value || null==value){
+      return null;
+    }
+    if (value.getClass()==MapReplacement.class){
+      return ((MapReplacement)value).toMap();
+    }
+      
+    return value;
   }
 
   @Override
