@@ -9,7 +9,9 @@ package bestsss.cache;
   * @author Stanimir Simeonoff
  */
 public interface CacheStatistics {
-
+  public interface CacheStatisticsProvider{
+    CacheStatistics getCacheStatistics();
+  }
   double getHitRatio();
   
   double getEvictionTimeMillis();

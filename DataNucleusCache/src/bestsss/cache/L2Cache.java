@@ -24,11 +24,14 @@ import org.datanucleus.metadata.AbstractMemberMetaData;
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
+
+import bestsss.cache.CacheStatistics.CacheStatisticsProvider;
+
 /**
  * @author Stanimir Simeonoff
  */
 //all PCs are stored as Object[] (similar to JCredo), it's a lot better than the current CachedPC which is very memory unfriendly
-public class L2Cache implements Level2Cache{
+public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
   private static final long serialVersionUID = 1L;
 
@@ -190,10 +193,10 @@ public class L2Cache implements Level2Cache{
   @Override
   public void close() {//do nothing, really  
   }
-
+  
   @Override
-  public void evict(Object oid) {
-    if (1==1)
+  public void evict(Object oid) {    
+    if (this.getClass()!=null)//always true
       return;
     
     evictImpl(oid);
@@ -305,6 +308,12 @@ public class L2Cache implements Level2Cache{
       result.put(key, get(key));
     }
     return result;    
+  }
+
+  
+  @Override
+  public CacheStatistics getCacheStatistics() {
+    return stats;
   }
 
   public CacheStatistics getStats(){
