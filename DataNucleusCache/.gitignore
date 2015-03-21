@@ -1,1 +1,6 @@
 /bin
+/build
+/jar-testBuilder.jardesc
+/jarBuilder-src.jardesc
+/jarBuilder.jardesc
+/endlessLoop.txt

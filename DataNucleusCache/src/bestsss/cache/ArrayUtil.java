@@ -28,8 +28,8 @@ class ArrayUtil {
     fields[length-CLASS] = pc.getObjectClass();
     fields[length-VERSION] = pc.getVersion();
     fields[length-HITS] = IntegerProvider.ZERO;
-    fields[length-TIME] = IntegerProvider.get(time);
-    fields[length-ACCESS] = IntegerProvider.ZERO;
+    fields[length-ACCESS] = fields[length-TIME] = IntegerProvider.get(time);
+    //fields[length-ACCESS] = IntegerProvider.ZERO;
     return fields;
   }
 
