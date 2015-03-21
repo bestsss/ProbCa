@@ -9,54 +9,50 @@ import jsr166e.LongAdder;
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-/**
- * @author Stanimir Simeonoff
+ /**
+  * @author Stanimir Simeonoff
  */
 public final class Stats implements CacheStatistics {
-
+  
   private final LongAdder hits=new LongAdder();
   private final LongAdder misses=new LongAdder();
   private final LongAdder puts=new LongAdder();
   private final LongAdder removals=new LongAdder();
-
-  private final LongAdder evictedElements=new LongAdder();
-  private final LongAdder evictionCount=new LongAdder();
   
+  private final LongAdder evictions=new LongAdder();
   private final LongAdder expiriredElements=new LongAdder();
   private final LongAdder expirationCount=new LongAdder();
-
+  
   private final LongAdder evictionTime=new LongAdder();
   private final LongAdder expirationTime=new LongAdder();
-
+  
   public void hit(){
-    hits.increment();
+	hits.increment();
   }
   public void miss(){
-    misses.increment();  
+	misses.increment();  
   }
 
   public void recordGet(Object result) {
-    (result!=null?hits:misses).increment();
+	(result!=null?hits:misses).increment();
   }
 
   public void recordPut(Object value) {
-    (value!=null?puts:removals).increment();
+	(value!=null?puts:removals).increment();
   }
 
   public void put(){
-    puts.increment();
-  }
-
-  public void recordEviction(long elapsedTime, int size) {
-    evictionTime.add(elapsedTime);
-    evictedElements.add(size);
-    evictionCount.add(1);
+	puts.increment();
   }
   
+  public void recordEviction(long elapsedTime, int size) {
+	evictionTime.add(elapsedTime);
+	evictions.add(size);
+  }
   public void recordExpiration(long elapsedTime, int size) {
-    expirationTime.add(elapsedTime);
-    expiriredElements.add(size);
-    expirationCount.add(1);
+	expirationTime.add(elapsedTime);
+	expiriredElements.add(size);
+	expirationCount.add(1);
   }
 
   public void recordRemoval(Object removed) {
@@ -66,61 +62,58 @@ public final class Stats implements CacheStatistics {
 
   @Override
   public double getEvictionTimeMillis(){
-    return evictionTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
+	return evictionTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
   }
 
   @Override
-  public long getEvictedElements(){
-    return evictedElements.longValue();
-  }
-  @Override
-  public long getEvictionCount() {
-    return evictionCount.longValue();
+  public long getEvictions(){
+	return evictions.longValue();
   }
   
+
   @Override
   public double getExpirationTimeMillis(){
-    return expirationTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
+	return expirationTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
   }
 
   @Override
   public long getExpiredElements(){
-    return expiriredElements.longValue();
+	return expiriredElements.longValue();
   }
   public long getExpirationCount(){
     return expirationCount.longValue();
   }
-
+    
 
   @Override
   public double getHitRatio(){
-    long hits = getHits();
-    long misses = getMisses();
-
-    return (double)hits/(hits+misses);
+	long hits = getHits();
+	long misses = getMisses();
+	
+	return (double)hits/(hits+misses);
   }
-
+  
 
   @Override
   public long getHits(){
-    return this.hits.longValue();	
+	return this.hits.longValue();	
   }
 
   @Override
   public long getMisses(){
-    return this.misses.longValue();		
+	return this.misses.longValue();		
   }
 
   @Override
   public long getPuts(){
-    return this.misses.longValue();		
+	return this.misses.longValue();		
   }
 
   @Override
   public long getRemovals(){
-    return this.removals.longValue();		
+	return this.removals.longValue();		
   }
   public long time() {
-    return System.nanoTime();
+	return System.nanoTime();
   }
 }
