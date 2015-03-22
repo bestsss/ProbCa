@@ -348,6 +348,10 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     final EvictionInfo evictionInfo = evictionDone.get();
     if (time - evictionInfo.evictedAt > MAX_EVICTION ){
       int delta = table.size() - maxElements;
+      if (delta > 64 || sharedExpirationIterator.get()!=null){
+        sharedExpire();
+        delta = table.size() - maxElements;
+      }
       if (delta > 0){
         performEviction(delta);
         evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EVICTION/2);//randomize
@@ -356,7 +360,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     } 
     if (time - evictionInfo.expiredAt > MAX_EXPIRATION ){
       performExpiration();
-      evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EXPIRATION/2);//random expirations
+      evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EXPIRATION/3);//random expirations
     }
   }
 
@@ -370,10 +374,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       if (evictImpl(key))
         evicted++;
     }
-    stats.recordEviction(stats.time() - statsTime, evicted);
-    if (delta > 64 || sharedExpirationIterator.get()!=null){
-      sharedExpire();
-    }
+    stats.recordEviction(stats.time() - statsTime, evicted);    
   }
 
   private void performExpiration() {
@@ -403,20 +404,24 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   private static final java.util.Iterator<Object[]> BUSY_ITERATOR = Collections.<Object[]>emptyList().iterator();
   //state:: "null" - no active expiration, BUSY_ITERATOR - some thread is performing shared expiration, valid iterator - free to grab and help
   //--perhaps should use split iterator with removed impl-- (need to have at least 4 CPUs for such operation) 
-  private final AtomicReference<java.util.Iterator<Object[]>> sharedExpirationIterator=new AtomicReference<>(); 
-  void sharedExpire(){
+  private final AtomicReference<java.util.Iterator<Object[]>> sharedExpirationIterator=new AtomicReference<>();
+  
+  /**
+   * @return true if the expiration needs to continue (i.e. sharedExpire is likely to perform more work), false is the expiration has completed
+   */
+  protected boolean sharedExpire(){//available for calls 
     java.util.Iterator<Object[]> i;
     final AtomicReference<Iterator<Object[]>> sharedExpirationIterator = this.sharedExpirationIterator;
     for(;;){
       i = sharedExpirationIterator.get();
       if (i==BUSY_ITERATOR)
-        return;
+        return false;
       
-      java.util.Iterator<Object[]> expected = i;  
+      java.util.Iterator<Object[]> expect = i;  
       if (i==null)
         i = ((ConcurrentHashMapV8<Object, Object[]>)table).values().iterator();
       
-      if (sharedExpirationIterator.compareAndSet(expected, BUSY_ITERATOR)){//Locked state
+      if (sharedExpirationIterator.compareAndSet(expect, BUSY_ITERATOR)){//Locked state
         break;
       }           
     }    
@@ -430,8 +435,10 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
         expired++;
       }
     }
-    sharedExpirationIterator.compareAndSet(BUSY_ITERATOR, i.hasNext()?i:null);
+    boolean result;
+    sharedExpirationIterator.compareAndSet(BUSY_ITERATOR, (result=i.hasNext())?i:null);
     stats.recordExpiration(stats.time()-start, expired);
+    return result;
   }
   
   private Object[] toArray(CachedPC<?> pc) {
