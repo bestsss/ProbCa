@@ -28,13 +28,12 @@ class ArrayUtil {
     fields[length-CLASS] = pc.getObjectClass();
     fields[length-VERSION] = pc.getVersion();
     fields[length-HITS] = IntegerProvider.ZERO;
-    fields[length-ACCESS] = fields[length-TIME] = IntegerProvider.get(time);
-    //fields[length-ACCESS] = IntegerProvider.ZERO;
+    fields[length-ACCESS] = fields[length-TIME] = getTime(time);
     return fields;
   }
 
   static Object[] extend(Object[] allFields, int currentLength, int index) {
-    int len = Allocator.length( index+(1+4+RESERVED));//4 extra bytes
+    int len = Allocator.length( index+(1+4+RESERVED));//4 extra slots
     Object[] copy = Arrays.copyOf(allFields, len);
     for (int i=currentLength; i<copy.length-RESERVED;i++){
       copy[i] = CachedX.NOT_PRESENT;
@@ -48,6 +47,7 @@ class ArrayUtil {
   static int maxLength(Object[] allFields) {
     return allFields.length - RESERVED;
   }
+  
   private static void incHitCount(Object[] fields){
     final int idx = fields.length - HITS;
     Object n = fields[idx];
@@ -56,15 +56,25 @@ class ArrayUtil {
     } else{ 
       n = IntegerProvider.ZERO;
     }
-    fields[idx] = n;
-    
+    fields[idx] = n;    
+  }
+  
+  //"cache" the last seen time, generally increments, so the within second there should be plenty of hits 
+  private static Integer lastTime = IntegerProvider.ZERO;//accessed via races but volatile is overkill here (need lazySet instead)
+  private static final Integer getTime(int time){
+	  Integer last = lastTime;
+	  if (last.intValue()==time)
+		  return last;
+	  last = IntegerProvider.get(time);
+	  lastTime = last;
+	  return last;
   }
   
   static void setTimeAndHitCount(Object[] fields, int time){
     //increase hit count 
     //and set time    
     incHitCount(fields);
-    fields[fields.length - ACCESS] = IntegerProvider.get(time);
+    fields[fields.length - ACCESS] = getTime(time);
   }
 
   public static int getCreationTime(Object[] o1) {
