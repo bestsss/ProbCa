@@ -10,6 +10,7 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
@@ -19,12 +20,23 @@ import jsr166e.ConcurrentHashMapV8;
 import org.datanucleus.NucleusContext;
 import org.datanucleus.cache.CachedPC;
 import org.datanucleus.cache.Level2Cache;
+import org.datanucleus.identity.DatastoreId;
+import org.datanucleus.identity.IdentityUtils;
+import org.datanucleus.identity.SingleFieldId;
 import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.metadata.AbstractMemberMetaData;
 /*
  * Written by Stanimir Simeonoff and released as public domain as described at
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
+
+
+
+
+
+
+
+
 
 
 import bestsss.cache.CacheStatistics.CacheStatisticsProvider;
@@ -66,6 +78,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       return new ClassMeta(clazz, interns, length, cacheable, expiration);
     }
   }
+  
   private static class EvictionInfo{
     int expiredAt;
     int evictedAt;
@@ -74,6 +87,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       this.evictedAt = time;
     }
   }
+  
   private static class InternEntry{
     static final InternEntry[] EMPTY={};
     final int field;
@@ -87,6 +101,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
   }
   private final AtomicReference<IdentityHashMap<Class<?>, ClassMeta>> metaMap=new AtomicReference<IdentityHashMap<Class<?>,ClassMeta>>(new IdentityHashMap<Class<?>,ClassMeta>());
+  private final Set<String> datastoreCacheable = Collections.newSetFromMap(new ConcurrentHashMapV8<String, Boolean>());
   private final Allocator allocator;
   private NucleusContext nucleusContext;
 
@@ -134,7 +149,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       int access = ArrayUtil.getAccessTime(o);
       int value = calcEntryValue(created, access, hits);
       return value;
-    }
+   }
   }
 
 
@@ -165,7 +180,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
 
-  private ClassMeta addMeta(Class<?> clazz, ClassMeta classMeta){
+  private ClassMeta addMeta(Class<?> clazz, ClassMeta classMeta, Class<?> objectIdClass){
     for(;;){//copy on write
       final IdentityHashMap<Class<?>, ClassMeta> map = metaMap.get();    
       final ClassMeta existing  = map.get(clazz);
@@ -177,12 +192,40 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
       IdentityHashMap<Class<?>, ClassMeta> update = new IdentityHashMap<>(map);
       update.put(clazz, classMeta);
+      if (objectIdClass!=null){
+        if (objectIdClass!=getClass()){
+          update.put(objectIdClass, classMeta);
+        }
+      } else{
+        datastoreCacheable.add(clazz.getName());
+      }
+    
       if (metaMap.compareAndSet(map, update)){
         return classMeta;
       }
     }
   }
 
+
+  private Class<?> getObjectIdClass(Class<?> pcClass, AbstractClassMetaData meta) {
+    final String objectidClass = meta.getObjectidClass();
+    if (objectidClass==null){
+      return null;
+    }
+    
+    try{
+      Class type =  Class.forName(objectidClass, false, pcClass.getClassLoader());
+      if (DatastoreId.class.isAssignableFrom(type)){
+        return null;
+      }
+      if (SingleFieldId.class.isAssignableFrom(type)){
+        return null;
+      }      
+      return type;
+    }catch(ClassNotFoundException _skip){      
+    }
+    return null;
+  }
 
   protected int resolveExpiration(AbstractClassMetaData meta) {
     return 45;
@@ -299,6 +342,9 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   @Override
   public CachedPC get(Object oid) {
     CachedPC<?> pc = assembleCachedPC(table.get(oid), oid);
+    if (pc==null && !isCacheableForGet(oid)){
+      return null;
+    }
     stats.recordGet(pc);
     return pc;
   }
@@ -450,7 +496,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     final boolean[] loaded = pc.getLoadedFields();
     final int length = Math.max(meta.length, loaded.length);
     if (length>meta.length){
-      addMeta(meta.clazz, meta.newLength(length));
+      addMeta(meta.clazz, meta.newLength(length), getClass());
     }
 
     final Object[] fields = ArrayUtil.newArray(pc, length, allocator, time());
@@ -547,11 +593,15 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       ArrayList<InternEntry> list = resolveInterns(meta);
       if (!list.isEmpty())
         interns=list.toArray(interns);
-    }
-
+    }    
+    
     int length = meta!=null?meta.getMemberCount():2;
     ClassMeta classMeta = new ClassMeta(clazz, interns, length, resolveCacheable(meta), resolveExpiration(meta));
-    return addMeta(clazz, classMeta);    
+    if (!classMeta.cacheable){
+      meta.setCacheable(false);//force metadata not to cache the class any longer, there are no proper read barriers... but it will do
+      //overall it hack a bit as the metadata should not be mutable
+    }
+    return addMeta(clazz, classMeta, getObjectIdClass(clazz, meta));    
 
   }
 
@@ -586,4 +636,21 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   protected static int millisToTime(long millis){//for subclasses 
     return (int)(millis>>>10);
   }
+  
+  protected boolean isCacheableForGet(Object oid){
+    if (oid==null){
+      return false;
+    }
+    //if the class is not effectively cacheable, don't count the miss in the get operation. counting missing on classes
+    //that would never be cached is pointless and destroy the most important stat: hitRatio
+    IdentityHashMap<Class<?>, ClassMeta> map = metaMap.get();
+    ClassMeta meta  = map.get(oid.getClass());
+    if (meta!=null){
+      return meta.cacheable;
+    }
+    
+    final String className = IdentityUtils.getTargetClassNameForIdentitySimple(oid);    
+    return className!=null && datastoreCacheable.contains(className);     
+  }
+  
 }
