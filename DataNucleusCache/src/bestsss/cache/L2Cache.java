@@ -39,6 +39,8 @@ import org.datanucleus.metadata.AbstractMemberMetaData;
 
 
 
+import org.datanucleus.metadata.MetaData;
+
 import bestsss.cache.CacheStatistics.CacheStatisticsProvider;
 
 /**
@@ -599,7 +601,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     ClassMeta classMeta = new ClassMeta(clazz, interns, length, resolveCacheable(meta), resolveExpiration(meta));
     if (!classMeta.cacheable){
       meta.setCacheable(false);//force metadata not to cache the class any longer, there are no proper read barriers... but it will do
-      //overall it hack a bit as the metadata should not be mutable
+      //overall it hacks a little as the metadata should not be mutable
     }
     return addMeta(clazz, classMeta, getObjectIdClass(clazz, meta));    
 
@@ -607,9 +609,9 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
   private ArrayList<InternEntry> resolveInterns(AbstractClassMetaData meta) {
     ArrayList<InternEntry> list = new ArrayList<>();
-    for (AbstractMemberMetaData fieldMeta : meta.getManagedMembers()){
+    for (AbstractMemberMetaData fieldMeta : getAllFields(meta)){
       String intern = fieldMeta.getValueForExtension(JdoExtensions.INTERN);
-      if (intern==null)
+      if (intern==null || fieldMeta.getFieldId()<0)
         continue;
 
       if ("default".equals(intern))
@@ -625,7 +627,25 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     }
     return list;
   }
-
+  
+  /**
+   * @param meta target class metadata to return fields for
+   * @return all MemberMetaData for passed ClassMetaData, including the ones from inherited classes
+   */
+  private static AbstractMemberMetaData[] getAllFields(AbstractClassMetaData meta){
+    if (!(meta.getParent() instanceof AbstractClassMetaData)){
+      return meta.getManagedMembers();
+    }
+    ArrayList<AbstractMemberMetaData> list =new ArrayList<AbstractMemberMetaData>(Arrays.asList(meta.getManagedMembers()));
+    for (MetaData parent = meta.getParent(); parent instanceof AbstractClassMetaData; parent=parent.getParent()){
+      AbstractClassMetaData clazz = (AbstractClassMetaData) parent;
+      if (clazz.getNoOfManagedMembers()==0){
+        continue;
+      }
+      list.addAll(Arrays.asList(clazz.getManagedMembers()));
+    }
+    return list.toArray(new AbstractMemberMetaData[list.size()]);
+  }
   int time(){ 
     //we use System.currentTimeMillis/1024 (i.e. >>>10)
     long elapsed = System.currentTimeMillis() - created;
