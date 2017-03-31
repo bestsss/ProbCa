@@ -27,4 +27,6 @@ public interface CacheStatistics {
   long getMisses();
   long getPuts();
   long getRemovals();
+  
+  long getObsolete();
 }

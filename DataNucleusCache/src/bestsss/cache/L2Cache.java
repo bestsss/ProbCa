@@ -56,7 +56,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
   private final long created = System.currentTimeMillis();
 
-  final Table<Object, Object[]> table = new ConcurrentHashMapV8<>(); //new ClosedHashTable<>();
+  private final Table<Object, Object[]> table = new ConcurrentHashMapV8<>(); 
   private final int maxElements;//65536 default
   private final Stats stats = new Stats();
   private final ConcurrentHashMap<String, InternMap<Object>> globalInterns = new ConcurrentHashMap<String, InternMap<Object>>();
@@ -104,7 +104,6 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
   private final AtomicReference<IdentityHashMap<Class<?>, ClassMeta>> metaMap=new AtomicReference<IdentityHashMap<Class<?>,ClassMeta>>(new IdentityHashMap<Class<?>,ClassMeta>());
   private final Set<String> datastoreCacheable = Collections.newSetFromMap(new ConcurrentHashMapV8<String, Boolean>());
-  private final Allocator allocator;
   private NucleusContext nucleusContext;
 
   private final ThreadLocal<EvictionInfo> evictionDone = new ThreadLocal<EvictionInfo>(){
@@ -117,7 +116,6 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   public L2Cache(NucleusContext nucleusContext){
     this.nucleusContext = nucleusContext;
     this.maxElements = resolveMaxElements(nucleusContext);
-    this.allocator =  new Allocator(nucleusContext.getConfiguration().getIntProperty("bestsss.l2cache.maxPooled"));
   }
 
   private static int resolveMaxElements(NucleusContext nucleusContext) {
@@ -133,7 +131,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     if (maxMem<0)
       return 1<<16;
 
-    return (int) ( maxMem/4678);//around 115k at 512MB
+    return (int) ( maxMem/4678);//around 115k elements at 512MB
   }
   private enum EvictionComparator implements Comparator<Object[]>{
     instance;
@@ -156,10 +154,10 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
 
   private static int calcEntryValue(int created, int accessed, int hits){//the higher the better, each hit gives ~1.25seconds extra time
-    return created+( hits*5 >> 2)+accessed*2;//time+5*hits/4
+    return created + (hits*5 >> 2) + accessed*2;//time + 5*hits/4 + access*2
   }
 
-  Comparator<Object[]> newExpirationComparator(final int time){
+  Comparator<Object[]> newExpirationComparator(final int time){//expired 1st
     return new Comparator<Object[]>() {          
       @Override
       public int compare(Object[] o1, Object[] o2) {
@@ -178,7 +176,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       return true;
     
     int created =  ArrayUtil.getCreationTime(o1);    
-    return time-created>meta.expiration*4;
+    return time-created > meta.expiration*4;
   }
 
 
@@ -195,7 +193,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       IdentityHashMap<Class<?>, ClassMeta> update = new IdentityHashMap<>(map);
       update.put(clazz, classMeta);
       if (objectIdClass!=null){
-        if (objectIdClass!=getClass()){
+        if (objectIdClass != getClass()){//getClass() is a special case, where the objectIdClass is unavailable and the step should be skipped
           update.put(objectIdClass, classMeta);
         }
       } else{
@@ -249,12 +247,6 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     evictImpl(oid);
   }
 
-  private void recycle(Object object) {
-    if (object instanceof Object[]){
-      allocator.offer((Object[]) object);      
-    }
-  }
-
   @Override
   public void evictAll() {
     table.clear();
@@ -269,7 +261,6 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
   private boolean evictImpl(Object key) {
     Object removed =table.put(key, null); 
-    recycle(removed);
     stats.recordRemoval(removed);
     return removed!=null;
   }
@@ -373,24 +364,21 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
 
   @Override
   public CachedPC put(Object oid, CachedPC pc) {
-    return putImpl(oid, pc, true);//the return value is never used, so we can ignore it 
+    putImpl(oid, pc);//the return value is never used, so we can ignore it
+    evictOrExpire();
+    return null;
   }
 
-  private CachedPC<?> putImpl(Object oid, CachedPC<?> pc, boolean assembleCached) {
+  private void putImpl(Object oid, CachedPC<?> pc) {
     if (!getMeta(pc.getObjectClass()).cacheable){
-      return null;
+      return;
     }	
 
-    Object existing = table.put(oid, toArray(pc));
-    recycle(existing);
+    /*Object existing = */
+    table.put(oid, toArray(pc));
     stats.recordPut(pc);
-
-    if (assembleCached){
-      evictOrExpire();
-    }
-    return null;
-    //return assembleCached? assembleCachedPC(existing, false):null;
   }
+  
   private void evictOrExpire() {
     final int time = time(); 
     final EvictionInfo evictionInfo = evictionDone.get();
@@ -490,28 +478,38 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
   
   private Object[] toArray(CachedPC<?> pc) {
-    if (pc instanceof CachedX<?>){
-      return ((CachedX<?>) pc).getArray();
-    }
-
     final ClassMeta meta = getMeta(pc.getObjectClass());
-    final boolean[] loaded = pc.getLoadedFields();
-    final int length = Math.max(meta.length, loaded.length);
-    if (length>meta.length){
-      addMeta(meta.clazz, meta.newLength(length), getClass());
-    }
-
-    final Object[] fields = ArrayUtil.newArray(pc, length, allocator, time());
-    for (int i=0; i<loaded.length; i++){
-      if (!loaded[i])
-        continue;
-      Object o = pc.getFieldValue(i);
-      if (o instanceof Map){
-        o = MapReplacement.replacement((Map<?,?>)o);
+    final Object[] fields;
+    
+    if (pc instanceof CachedX<?>){//already exists, fix time() and access like it's newly placed
+      fields = ((CachedX<?>) pc).getArray().clone();//clone it early, so no changes to CachedX would be reflected straight into the cache
+      ArrayUtil.setTimeAndAccess(fields, time());//apply time, zero the hitCount - the object has not been in use in its current state (say changing entity's state to 'deleted', 'removed' should not be kept)
+      
+      for (int i=0; i<fields.length - ArrayUtil.RESERVED; i++){
+        if (fields[i] instanceof Map){
+          fields[i] = MapReplacement.replacement((Map<?, ?>) fields[i]);
+        }
       }
-      fields[i] = o;
-    }
 
+    } else{
+      final boolean[] loaded = pc.getLoadedFields();
+      final int length = Math.max(meta.length, loaded.length);
+      if (length>meta.length){
+        addMeta(meta.clazz, meta.newLength(length), getClass());
+      }
+  
+      fields = ArrayUtil.newArray(pc, length, time());
+      for (int i=0; i<loaded.length; i++){
+        if (!loaded[i])
+          continue;
+        Object o = pc.getFieldValue(i);
+        if (o instanceof Map){
+          o = MapReplacement.replacement((Map<?,?>)o);
+        }
+        fields[i] = o;
+      }
+    }
+    
     //process interns
     for (InternEntry e : meta.interns){
       fields[e.field] = e.map.intern(fields[e.field]);
@@ -525,7 +523,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   @Override @SuppressWarnings("rawtypes")
   public void putAll(Map<Object, CachedPC> objs) {
     for(Map.Entry<Object, CachedPC> e : objs.entrySet()){
-      putImpl(e.getKey(), e.getValue(), false);
+      putImpl(e.getKey(), e.getValue());
     }
     evictOrExpire();
   }
@@ -553,30 +551,31 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   private CachedPC<?> assembleCachedPC(Object object, Object key) {
     if (!(object instanceof Object[]))      
       return null;
+    
+    final int time = time();
+    
     Object[] array = (Object[]) object;
-
-    if (array.length < ArrayUtil.RESERVED){
-      throwWrongArray(array);//separate method to reduce code size
-    }
-
-
     int len = array.length;
-
+    if (len < ArrayUtil.RESERVED){
+      throwWrongArray(array);//separate method to reduce code size
+    }    
+           
     @SuppressWarnings("unchecked")
-    Class<Object> clazz = (Class<Object>) array[--len];
-    if (isExpired(array, time())){//the array ref to cache till be in L1 (so here it's the best place to call isExpired)
+    Class<Object> clazz = (Class<Object>) array[--len];    
+    if (isExpired(array, time)){//the array ref to cache will be in L1 (so here it's the best place to call isExpired)
       evictImpl(key);
+      stats.recordObsolete();
       return null;
     }
 
     Object version = array[--len];
 
     //touch the original array    
-    ArrayUtil.setTimeAndHitCount(array, time());
-    //need to clone in order to use the allocator, cloning would keep the object in the young gen
-    //the array is small should go in the TLAB and die trivially within young gen
-    //technically using ref counting and finalize can achieve similar effects but it's too expensive (finalize requires FinalReference and a wide global lock)    
-    CachedX<Object> result = new CachedX<Object>(clazz, allocator.maxPooled>0?array.clone():array, array.length - ArrayUtil.RESERVED, version);        
+    ArrayUtil.setTimeAndHitCount(array, time);//racy but meh, we can live with some races
+    
+    //the caller is not expected to modify the contents of the cached instance;
+    //cloning would be rather cheap as the the array is small should go in the TLAB and die trivially within young gen
+    CachedX<Object> result = new CachedX<Object>(clazz, array, array.length - ArrayUtil.RESERVED, version);        
     return result;
   }
 
@@ -642,7 +641,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       if (clazz.getNoOfManagedMembers()==0){
         continue;
       }
-      list.addAll(Arrays.asList(clazz.getManagedMembers()));
+      list.addAll(0, Arrays.asList(clazz.getManagedMembers()));//parent classes at start
     }
     return list.toArray(new AbstractMemberMetaData[list.size()]);
   }
@@ -672,5 +671,4 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     final String className = IdentityUtils.getTargetClassNameForIdentitySimple(oid);    
     return className!=null && datastoreCacheable.contains(className);     
   }
-  
 }

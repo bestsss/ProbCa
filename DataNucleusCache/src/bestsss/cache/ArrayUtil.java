@@ -13,6 +13,7 @@ import org.datanucleus.cache.CachedPC;
  * @author Stanimir Simeonoff
  */
 class ArrayUtil {
+  //order has to be preserved
   private static final int CLASS = 1;
   private static final int VERSION = 2;
   private static final int HITS = 3;
@@ -20,9 +21,9 @@ class ArrayUtil {
   private static final int ACCESS = 5;
   static final int RESERVED = ACCESS;
 
-  static Object[] newArray(CachedPC<?> pc, int length, Allocator allocator, int time) {
+  static Object[] newArray(CachedPC<?> pc, int length, int time) {
     length += RESERVED;
-    Object[] fields = allocator.get(length);
+    Object[] fields = newArray(length);
     length = fields.length;
 
     fields[length-CLASS] = pc.getObjectClass();
@@ -32,6 +33,12 @@ class ArrayUtil {
     return fields;
   }
 
+  private static Object[] newArray(int length) {
+    Object[] result = new Object[length];
+    Arrays.fill(result, CachedX.NOT_PRESENT);
+    return result;
+  }
+  
   static Object[] extend(Object[] allFields, int currentLength, int index) {
     int len = Allocator.length( index+(1+4+RESERVED));//4 extra slots
     Object[] copy = Arrays.copyOf(allFields, len);
@@ -56,7 +63,7 @@ class ArrayUtil {
     } else{ 
       n = IntegerProvider.ZERO;
     }
-    fields[idx] = n;    
+    fields[idx] = n;
   }
   
   //"cache" the last seen time, generally increments, so the within second there should be plenty of hits 
@@ -90,5 +97,12 @@ class ArrayUtil {
 
   static int getAccessTime(Object[] o1) {
     return (Integer) o1[o1.length - ACCESS];
+  }
+  
+  static void setTimeAndAccess(Object[] fields, int time){
+    int length = fields.length;
+    fields[length-ACCESS] = fields[length-TIME] = getTime(time);
+    fields[length-HITS] = IntegerProvider.ZERO;
+  
   }
 }

@@ -29,6 +29,7 @@ import java.util.Map;
 
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.Spliterator;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ThreadLocalRandom;
@@ -237,7 +238,7 @@ public class ConcurrentHashMapV8<K,V>
      * This interface provides a subset of the functionality of JDK8
      * java.util.Spliterator.
      */
-    public static interface ConcurrentHashMapSpliterator<T> {
+    public static interface ConcurrentHashMapSpliterator<T> extends java.util.Spliterator<T> {
         /**
          * If possible, returns a new spliterator covering
          * approximately one half of the elements, which will not be
@@ -254,7 +255,7 @@ public class ConcurrentHashMapV8<K,V>
         /** Applies the action to each untraversed element */
         void forEachRemaining(Action<? super T> action);
         /** If an element remains, applies the action and returns true. */
-        boolean tryAdvance(Action<? super T> action);
+        boolean tryAdvance(Action<? super T> action);        
     }
 
     // Sams
@@ -3291,6 +3292,13 @@ public class ConcurrentHashMapV8<K,V>
             if (s == null && (index += baseSize) >= n)
                 index = ++baseIndex;
         }
+        
+        public int characteristics(){
+          return Spliterator.DISTINCT | Spliterator.CONCURRENT |
+              Spliterator.NONNULL;
+        }
+
+
     }
 
     /**
@@ -3454,6 +3462,15 @@ public class ConcurrentHashMapV8<K,V>
 
         public long estimateSize() { return est; }
 
+        public boolean tryAdvance(java.util.function.Consumer<? super K> action){
+          if (action == null) throw new NullPointerException();
+          Node<K,V> p;
+          if ((p = advance()) == null)
+              return false;
+          action.accept(p.key);
+          return true;
+        }
+
     }
 
     static final class ValueSpliterator<K,V> extends Traverser<K,V>
@@ -3486,7 +3503,14 @@ public class ConcurrentHashMapV8<K,V>
             action.apply(p.val);
             return true;
         }
-
+        public boolean tryAdvance(java.util.function.Consumer<? super V> action){
+          if (action == null) throw new NullPointerException();
+          Node<K,V> p;
+          if ((p = advance()) == null)
+              return false;
+          action.accept(p.val);
+          return true;
+        }
         public long estimateSize() { return est; }
 
     }

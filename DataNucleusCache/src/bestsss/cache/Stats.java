@@ -18,7 +18,9 @@ public final class Stats implements CacheStatistics {
   private final LongAdder misses=new LongAdder();
   private final LongAdder puts=new LongAdder();
   private final LongAdder removals=new LongAdder();
-
+  
+  private final LongAdder obsolete=new LongAdder();
+  
   private final LongAdder evictedElements=new LongAdder();
   private final LongAdder evictionCount=new LongAdder();
   
@@ -63,7 +65,11 @@ public final class Stats implements CacheStatistics {
     if (removed!=null)
       removals.add(1);
   }  
-
+  
+  public void recordObsolete() {
+    obsolete.increment();
+  }
+  
   @Override
   public double getEvictionTimeMillis(){
     return evictionTime.doubleValue() /TimeUnit.MILLISECONDS.toNanos(1);
@@ -90,7 +96,7 @@ public final class Stats implements CacheStatistics {
   public long getExpirationCount(){
     return expirationCount.longValue();
   }
-
+  
 
   @Override
   public double getHitRatio(){
@@ -115,7 +121,9 @@ public final class Stats implements CacheStatistics {
   public long getPuts(){
     return this.misses.longValue();		
   }
-
+  public long getObsolete(){
+    return this.obsolete.longValue();
+  }
   @Override
   public long getRemovals(){
     return this.removals.longValue();		

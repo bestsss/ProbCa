@@ -55,7 +55,7 @@ public class CachedX<T> extends CachedPC<T>{
     return allFields;
   }
 
-  private void zapSuperLoadedFields() {
+  private void zapSuperLoadedFields() {//this object is supposed to have short life span, so zapping the field is likely superflous here
     if (loadFieldsSetter!=null){//remove the useless empty boolean array
       try{
         loadFieldsSetter.set(this, EMPTY);
@@ -88,7 +88,7 @@ public class CachedX<T> extends CachedPC<T>{
 
   @Override
   public boolean[] getLoadedFields() {
-    boolean[] result = new boolean[Math.min(length, allFields.length)];//reduce the latice, remove bound checks
+    boolean[] result = new boolean[Math.min(length, allFields.length)];//reduce the lattice, remove bound checks
     for (int i=0;i<result.length;i++){
       result[i] = allFields[i]!=NOT_PRESENT;
     }
