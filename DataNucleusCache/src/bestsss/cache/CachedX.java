@@ -79,8 +79,8 @@ public class CachedX<T> extends CachedPC<T>{
     if (NOT_PRESENT==value || null==value){
       return null;
     }
-    if (value.getClass()==MapReplacement.class){
-      return ((MapReplacement)value).toMap();
+    if (value instanceof SCOWrapper){
+      return ((SCOWrapper) value).unwrap();
     }
       
     return value;

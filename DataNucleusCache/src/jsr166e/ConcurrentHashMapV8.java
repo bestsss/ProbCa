@@ -3965,6 +3965,7 @@ public class ConcurrentHashMapV8<K,V>
 
       CacheComparator<Map.Entry<K, V> > c = new CacheComparatorX<>(comparator);      
       Collection<Map.Entry<K, V>> least =  c.leastOf(iteartor, entries);
+      @SuppressWarnings("unchecked")
       K[] result =(K[]) new Object[least.size()];
       int i=0;
       for (Map.Entry<K, V> e : least){

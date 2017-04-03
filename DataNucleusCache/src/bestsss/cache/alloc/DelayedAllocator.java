@@ -8,6 +8,8 @@ public class DelayedAllocator  {
   final AtomicIntegerArray counters;
   final int length;
   final ArrayPool<Object[]>[] pool;
+  
+  @SuppressWarnings("unchecked")
   public DelayedAllocator() {
     int CPUs = Runtime.getRuntime().availableProcessors();
     length = CPUs>1?nextPow2(CPUs):1;

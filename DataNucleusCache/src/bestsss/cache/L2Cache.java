@@ -214,7 +214,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     }
     
     try{
-      Class type =  Class.forName(objectidClass, false, pcClass.getClassLoader());
+      Class<?> type =  Class.forName(objectidClass, false, pcClass.getClassLoader());
       if (DatastoreId.class.isAssignableFrom(type)){
         return null;
       }
@@ -266,14 +266,14 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   @Override
-  public void evictAll(Collection oids) {
+  public void evictAll(@SuppressWarnings("rawtypes") Collection oids) {
     for (Object key : oids){
       evictImpl(key);
     }
   }
 
   @Override
-  public void evictAll(Class pcClass, boolean subclasses) {
+  public void evictAll(@SuppressWarnings("rawtypes") Class pcClass, boolean subclasses) {
     table.clear();//mass eviction
   }
 
@@ -283,7 +283,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   @Override
-  public void pinAll(Collection oids) {
+  public void pinAll(@SuppressWarnings("rawtypes") Collection oids) {
     throw new UnsupportedOperationException();
   }
 
@@ -293,7 +293,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   @Override
-  public void pinAll(Class pcClass, boolean subclasses) {
+  public void pinAll(@SuppressWarnings("rawtypes") Class pcClass, boolean subclasses) {
     throw new UnsupportedOperationException();
   }
 
@@ -303,7 +303,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   @Override
-  public void unpinAll(Collection oids) {
+  public void unpinAll(@SuppressWarnings("rawtypes") Collection oids) {
     throw new UnsupportedOperationException();
   }
 
@@ -313,7 +313,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   @Override
-  public void unpinAll(Class pcClass, boolean subclasses) {
+  public void unpinAll(@SuppressWarnings("rawtypes") Class pcClass, boolean subclasses) {
     throw new UnsupportedOperationException();
   }
 
@@ -332,6 +332,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     return table.size();
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
   public CachedPC get(Object oid) {
     CachedPC<?> pc = assembleCachedPC(table.get(oid), oid);
@@ -362,6 +363,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     return stats;
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
   public CachedPC put(Object oid, CachedPC pc) {
     putImpl(oid, pc);//the return value is never used, so we can ignore it
@@ -390,7 +392,7 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       }
       if (delta > 0){
         performEviction(delta);
-        evictionInfo.expiredAt = time() + ThreadLocalRandom.current().nextInt(MAX_EVICTION/2);//randomize
+        evictionInfo.evictedAt = time() + ThreadLocalRandom.current().nextInt(MAX_EVICTION/2);//randomize
         return;
       }
     } 
@@ -485,13 +487,10 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       fields = ((CachedX<?>) pc).getArray().clone();//clone it early, so no changes to CachedX would be reflected straight into the cache
       ArrayUtil.setTimeAndAccess(fields, time());//apply time, zero the hitCount - the object has not been in use in its current state (say changing entity's state to 'deleted', 'removed' should not be kept)
       
-      for (int i=0; i<fields.length - ArrayUtil.RESERVED; i++){
-        if (fields[i] instanceof Map){
-          fields[i] = MapReplacement.replacement((Map<?, ?>) fields[i]);
-        }
+      for (int i=0; i<fields.length - ArrayUtil.RESERVED; i++){//wrap all fields regardless
+         fields[i] = wrap(fields[i]);        
       }
-
-    } else{
+    } else{      
       final boolean[] loaded = pc.getLoadedFields();
       final int length = Math.max(meta.length, loaded.length);
       if (length>meta.length){
@@ -501,12 +500,8 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
       fields = ArrayUtil.newArray(pc, length, time());
       for (int i=0; i<loaded.length; i++){
         if (!loaded[i])
-          continue;
-        Object o = pc.getFieldValue(i);
-        if (o instanceof Map){
-          o = MapReplacement.replacement((Map<?,?>)o);
-        }
-        fields[i] = o;
+          continue;        
+        fields[i] = wrap(pc.getFieldValue(i));;
       }
     }
     
@@ -517,7 +512,15 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
     return fields;
   }
 
-
+  private Object wrap(final Object o){
+    if (o instanceof Map){
+      return MapReplacement.wrap((Map<?,?>)o);
+    }
+    if (o instanceof Collection){
+      return CollectionReplacement.wrap((Collection<?>) o);
+    }
+    return o;    
+  }
 
 
   @Override @SuppressWarnings("rawtypes")

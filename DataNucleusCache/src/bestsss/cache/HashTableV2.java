@@ -9,7 +9,8 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "unchecked"})
+@Deprecated
 public class HashTableV2<K,V> {
   private static final int CPUs = Runtime.getRuntime().availableProcessors();
 

@@ -100,6 +100,7 @@ public class MapLoops {
 
     static void test(int i, int nkeys, Class<?> mapClass) throws Exception {
         System.out.print("Threads: " + i + "\t:");
+        @SuppressWarnings("unchecked")
         Map<Integer, Integer> map = (Map<Integer,Integer>)mapClass.newInstance();
         Integer[] key = makeKeys(nkeys);
         // Uncomment to start with a non-empty table

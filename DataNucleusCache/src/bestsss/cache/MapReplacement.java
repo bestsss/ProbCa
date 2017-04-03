@@ -2,9 +2,11 @@ package bestsss.cache;
 
 import java.util.*;
 
-public class MapReplacement {
+class MapReplacement implements SCOWrapper{
   private final Object[] serializedKV;
-  private final Class<? extends Map> clazz;
+  private final Class<? extends Map<?, ?>> clazz;
+
+  @SuppressWarnings("unchecked")
   private MapReplacement(Map<?, ?> map){
     Object[] serializedKV=new Object[map.size()<<1];//can use class as object at zero idx
     int i= 0;
@@ -17,10 +19,16 @@ public class MapReplacement {
       serializedKV[i++] = e.getValue();
     }
     this.serializedKV = serializedKV;
-    this.clazz = map.getClass();
+    this.clazz = (Class<? extends Map<?, ?>>) map.getClass();
   }
   
-  public Map<?, ?> toMap(){
+  
+  @Override
+  public Object unwrap() {
+    return toMap();
+  }
+  
+  private Map<?, ?> toMap(){
     Map<Object, Object> map = createMap();
     Object[] serializedKV = this.serializedKV;
     if (serializedKV==null)
@@ -50,8 +58,9 @@ public class MapReplacement {
     int len = serializedKV.length + (serializedKV.length>>2);
     return Integer.highestOneBit(len-1)<<1;
   }
-  private static final IdentityHashMap<Class<?>, Boolean> supportedClasses=createSupportedClass();
-  public static Object replacement(Map<?, ?> map){
+  
+  private static final IdentityHashMap<Class<?>, Boolean> supportedClasses=createSupportedClass();  
+  static Object wrap(Map<?, ?> map){
     if (supportedClasses.containsKey(map.getClass()))
       return new MapReplacement(map);
     
