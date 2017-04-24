@@ -416,10 +416,15 @@ public class L2Cache implements Level2Cache, CacheStatisticsProvider{
   }
 
   private void performExpiration() {
-    final int delta = table.size() - maxElements;
+    final int minExpire = maxElements>>>10;
+    final int size = table.size();
+    if (size <= minExpire)
+      return;
+    
+    final int delta = size - maxElements;
 
     final long statsTime = stats.time();
-    final int entries = Math.max(Math.min(128, delta), Math.max(16, maxElements>>>10));
+    final int entries = Math.max(Math.min(128, delta), Math.max(16, minExpire));
     final int time = time();
 
     final Collection<Object> keys = table.getExpirable(entries, newExpirationComparator(time));

@@ -18,6 +18,7 @@ import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.Enumeration;
@@ -3959,7 +3960,7 @@ public class ConcurrentHashMapV8<K,V>
 
       final Node<K,V>[] t = this.table;
       int f = t == null ? 0 : t.length;
-                
+      if (f==0) return Collections.emptyList();
       RandomTraverser<K,V> iteartor= new RandomTraverser<K,V> (t, f, sampleSize);
 
 

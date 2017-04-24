@@ -2,12 +2,11 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Created-By: Stanimir
 Built-By: Hand
-Build-Jdk: 1.7.0_72
+Build-Jdk: 1.8.0_112
 Implementation-Title: Expirable/evictable/probabalistic L2 cache for DataNucleus
-Implementation-Version: 0.1
+Implementation-Version: 0.9.5
 Implementation-Vendor-Id: bestss
 Bundle-Description: One cache to rock them all
-Bundle-DocURL: http://www.playtech.com/
 Bundle-Name: bestsss L2Cache
 Bundle-SymbolicName: bestsss.cache
 Bundle-Vendor: Stanimir Simeonoff
