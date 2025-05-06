@@ -172,5 +172,9 @@ public class CachedX<T> extends CachedPC<T>{
 
   int getLength() {
      return length;
-  } 
+  }
+  @Override public void setVersion(Object version){
+    super.setVersion(version);
+    allFields[allFields.length - 2] = version; //ArrayUtils.VERSION
+  }
 }
