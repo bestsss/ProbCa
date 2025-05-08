@@ -175,6 +175,6 @@ public class CachedX<T> extends CachedPC<T>{
   }
   @Override public void setVersion(Object version){
     super.setVersion(version);
-    allFields[allFields.length - 2] = version; //ArrayUtils.VERSION
+    allFields[allFields.length - ArrayUtil.VERSION] = version; //update immediately, similar to the regualar fields
   }
 }

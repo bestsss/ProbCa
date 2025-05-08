@@ -15,7 +15,7 @@ import org.datanucleus.cache.CachedPC;
 class ArrayUtil {
   //order has to be preserved
   private static final int CLASS = 1;
-  private static final int VERSION = 2;
+          static final int VERSION = 2;//package private used by CachedX
   private static final int HITS = 3;
   private static final int TIME = 4;
   private static final int ACCESS = 5;

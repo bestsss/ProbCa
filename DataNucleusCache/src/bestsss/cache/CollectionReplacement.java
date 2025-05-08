@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 * @author Stanimir Simeonoff
 */
 class CollectionReplacement implements SCOWrapper{
-  private static final Object[] EMPTY ={}; 
+  static final Object[] EMPTY ={};
   final Object[] elements;
   final java.util.function.Supplier<Collection<Object>> ctor;
   
@@ -24,15 +24,24 @@ class CollectionReplacement implements SCOWrapper{
     this.ctor = ctor;
   }
   
-  public Collection<?> unwrap(){ 
+  public Collection<?> unwrap(){
     Collection<Object> c = ctor.get();
     for(Object o : elements){
       c.add(o);
     }
     return c;
   }
-  
+
   static Object wrap(Collection<?> c){
+    if (c.isEmpty()){ //extra handling for empty collections, a total const cost for the common ones
+      if (c instanceof ArrayList) return EMPTY_ARRAYLIST;
+      if (c instanceof LinkedHashSet) return EMPTY_LINKEDHASHSET;
+      if (c instanceof HashSet) return EMPTY_HASHSET;
+    }
+    return wrapImpl(c);
+  }
+
+  private static Object wrapImpl(Collection<?> c){
     final Supplier<Collection<Object>> ctor;
     if (c instanceof ArrayList) {
       ctor = ArrayList::new;
@@ -50,4 +59,8 @@ class CollectionReplacement implements SCOWrapper{
     
     return new CollectionReplacement(c.isEmpty()?EMPTY:c.toArray(), ctor);
   }
+
+  private static final Object EMPTY_ARRAYLIST = wrapImpl(new ArrayList<>());
+  private static final Object EMPTY_LINKEDHASHSET = wrapImpl(new LinkedHashSet<>());
+  private static final Object EMPTY_HASHSET = wrapImpl(new HashSet<>());
 }
