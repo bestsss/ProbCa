@@ -18,7 +18,7 @@ class MapReplacement implements SCOWrapper{
       serializedKV[i++] = e.getKey();
       serializedKV[i++] = e.getValue();
     }
-    this.serializedKV = serializedKV;
+    this.serializedKV = serializedKV.length == 0 ? CollectionReplacement.EMPTY : serializedKV;
     this.clazz = (Class<? extends Map<?, ?>>) map.getClass();
   }
   
@@ -32,7 +32,7 @@ class MapReplacement implements SCOWrapper{
     Map<Object, Object> map = createMap();
     Object[] serializedKV = this.serializedKV;
     if (serializedKV==null)
-      return Collections.emptyMap();
+      return map;
     
     for (int i=0;i<serializedKV.length;i++){
       map.put(serializedKV[i++], serializedKV[i]);
@@ -41,6 +41,7 @@ class MapReplacement implements SCOWrapper{
   }
 
   private Map<Object, Object> createMap() {
+    final Class<?> clazz = this.clazz;
     if (HashMap.class == clazz){
       return new HashMap<>(fittingSize());
     }
@@ -61,10 +62,17 @@ class MapReplacement implements SCOWrapper{
   
   private static final IdentityHashMap<Class<?>, Boolean> supportedClasses=createSupportedClass();  
   static Object wrap(Map<?, ?> map){
-    if (supportedClasses.containsKey(map.getClass()))
-      return new MapReplacement(map);
-    
-    return map;
+    if (!supportedClasses.containsKey(map.getClass()))
+      return map;
+
+    if (!map.isEmpty()) {
+      if (map.getClass() == HashMap.class)
+        return EMPTY_HASHMAP;
+      if (map.getClass() == LinkedHashMap.class)
+        return EMPTY_LINKED_HASHMAP;
+    }
+
+    return new MapReplacement(map);
   }
 
   private static IdentityHashMap<Class<?>, Boolean> createSupportedClass() {
@@ -74,6 +82,6 @@ class MapReplacement implements SCOWrapper{
     }
     return map;
   }
-  
-  
+  private static final MapReplacement EMPTY_HASHMAP = new MapReplacement(new HashMap<>());
+  private static final MapReplacement EMPTY_LINKED_HASHMAP = new MapReplacement(new LinkedHashMap<>());
 }
