@@ -65,7 +65,7 @@ class MapReplacement implements SCOWrapper{
     if (!supportedClasses.containsKey(map.getClass()))
       return map;
 
-    if (!map.isEmpty()) {
+    if (map.isEmpty()) {
       if (map.getClass() == HashMap.class)
         return EMPTY_HASHMAP;
       if (map.getClass() == LinkedHashMap.class)
